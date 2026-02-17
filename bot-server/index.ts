@@ -12,8 +12,7 @@ import {
     ItemCategory,
     Language,
     OutfitItem,
-    TelegramUpdate,
-    UserSession
+    TelegramUpdate
 } from './types';
 import {
     validateModelImage,
@@ -621,16 +620,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.get('/metrics', (req, res) => {
+app.get('/metrics', (req: express.Request, res: express.Response) => {
     const filter = (req.query.filter as any) || 'all';
     res.json(analytics.getMetrics(filter));
 });
 
-app.get('/profiles', (req, res) => {
+app.get('/profiles', (_req: express.Request, res: express.Response) => {
     res.json(analytics.getUserProfiles());
 });
 
-app.post('/gift', async (req, res) => {
+app.post('/gift', async (req: express.Request, res: express.Response) => {
     const { chatId, amount } = req.body;
     const session = sessionService.getSession(chatId);
     if (session) {
