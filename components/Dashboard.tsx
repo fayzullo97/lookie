@@ -95,7 +95,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           <div className={`text-3xl font-bold ${Number(successRate) > 90 ? 'text-green-400' : 'text-yellow-400'}`}>
             {successRate}%
           </div>
-          <div className="text-xs text-slate-400 mt-2">Target: > 95%</div>
+          <div className="text-xs text-slate-400 mt-2">Target: &gt; 95%</div>
         </div>
 
         <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-lg">
