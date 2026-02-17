@@ -19,6 +19,7 @@
     "@vitejs/plugin-react": "^4.2.1",
     "typescript": "^5.3.3",
     "vite": "^5.0.12",
-    "serve": "^14.2.1"
+    "serve": "^14.2.1",
+    "@types/node": "^20.11.20"
   }
 }
