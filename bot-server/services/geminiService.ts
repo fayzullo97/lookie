@@ -115,7 +115,7 @@ export const validateModelImage = async (apiKey: string, base64Image: string, mo
             return await retryOperation(async () => {
                 const result = await model.generateContent([
                     { inlineData: { mimeType: "image/jpeg", data: cleanedImage } },
-                    { text: "Is this a photo of a human? Respond valid:true if user is visible from head to knees/ankles. Also detect the gender of the person (male or female)." },
+                    { text: "Is this a photo of a human? Respond valid:true if a person is clearly visible and it is suitable for a virtual try-on (ideally head to knees, but waist-up is also okay). Also detect the gender of the person (male or female)." },
                 ]);
 
                 const response = await result.response;

@@ -1,5 +1,5 @@
 
-export const INITIAL_CREDITS = 30;
+export const INITIAL_CREDITS_VAL = 30;
 
 export enum AppState {
     NEW_USER = 'NEW_USER',

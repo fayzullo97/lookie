@@ -1,65 +1,137 @@
 
-import { UserSession, AppState, INITIAL_CREDITS } from "../types";
-import { storage } from "./storageService";
-
-const SESSIONS_KEY = 'bot_sessions';
-
-export const INITIAL_CREDITS_VAL = 30;
+import { UserSession, AppState, INITIAL_CREDITS_VAL, ItemCategory, OutfitItem } from "../types";
+import { supabase } from "./supabaseClient";
 
 class SessionService {
-    private sessions: Record<number, UserSession>;
+    // In-memory cache for buffers and quick access
+    private ephemeralSessions: Record<number, { photoBuffer: string[], bufferTimeout: any }> = {};
 
-    constructor() {
-        this.sessions = this.loadSessions();
-    }
+    public async getOrCreateSession(chatId: number, userInfo?: { username?: string, first_name?: string }): Promise<UserSession> {
+        // 1. Try to get from Supabase
+        let { data: user, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', chatId)
+            .single();
 
-    private loadSessions(): Record<number, UserSession> {
-        try {
-            const stored = storage.getItem(SESSIONS_KEY);
-            return stored ? JSON.parse(stored) : {};
-        } catch (e) {
-            return {};
-        }
-    }
-
-    private saveSessions() {
-        storage.setItem(SESSIONS_KEY, JSON.stringify(this.sessions));
-    }
-
-    public getOrCreateSession(chatId: number, userInfo?: { username?: string }): UserSession {
-        if (!this.sessions[chatId]) {
-            this.sessions[chatId] = {
-                chatId,
+        if (error || !user) {
+            // 2. Create if not exists
+            const newUser = {
+                id: chatId,
                 username: userInfo?.username,
-                state: AppState.NEW_USER,
-                modelImage: null,
-                originalModelImage: null,
-                outfitItems: [],
-                lastActivity: Date.now(),
+                first_name: userInfo?.first_name,
                 credits: INITIAL_CREDITS_VAL,
-                photoBuffer: [],
-                bufferTimeout: null
+                current_state: AppState.NEW_USER,
+                last_active_at: new Date().toISOString()
             };
-            this.saveSessions();
+
+            const { data: created, error: createError } = await supabase
+                .from('users')
+                .insert([newUser])
+                .select()
+                .single();
+
+            if (createError) {
+                console.error("Error creating user:", createError);
+                // Fallback to minimal session if DB fails (not ideal)
+            }
+            user = created || newUser;
         }
-        return this.sessions[chatId];
+
+        // Initialize ephemeral state if needed
+        if (!this.ephemeralSessions[chatId]) {
+            this.ephemeralSessions[chatId] = { photoBuffer: [], bufferTimeout: null };
+        }
+
+        // 3. Map DB user to UserSession
+        return this.mapDbToSession(user);
     }
 
-    public updateSession(chatId: number, updates: Partial<UserSession>) {
-        if (this.sessions[chatId]) {
-            // Don't persist bufferTimeout
-            const { bufferTimeout, ...rest } = updates;
-            this.sessions[chatId] = { ...this.sessions[chatId], ...rest };
-            this.saveSessions();
+    public async updateSession(chatId: number, updates: Partial<UserSession>): Promise<void> {
+        const dbUpdates: any = {};
+
+        if (updates.state) dbUpdates.current_state = updates.state;
+        if (updates.language) dbUpdates.language = updates.language;
+        if (updates.credits !== undefined) dbUpdates.credits = updates.credits;
+        if (updates.modelGender) dbUpdates.model_gender = updates.modelGender;
+        if (updates.lastMonthlyGrant) dbUpdates.last_monthly_grant = updates.lastMonthlyGrant;
+
+        dbUpdates.last_active_at = new Date().toISOString();
+
+        if (Object.keys(dbUpdates).length > 0) {
+            await supabase
+                .from('users')
+                .update(dbUpdates)
+                .eq('id', chatId);
+        }
+
+        // Update ephemeral state
+        if (updates.photoBuffer !== undefined) {
+            this.ephemeralSessions[chatId] = {
+                ...this.ephemeralSessions[chatId],
+                photoBuffer: updates.photoBuffer
+            };
+        }
+        if (updates.bufferTimeout !== undefined) {
+            this.ephemeralSessions[chatId] = {
+                ...this.ephemeralSessions[chatId],
+                bufferTimeout: updates.bufferTimeout
+            };
         }
     }
 
-    public getSession(chatId: number): UserSession | undefined {
-        return this.sessions[chatId];
+    public async getSession(chatId: number): Promise<UserSession | undefined> {
+        const { data: user, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', chatId)
+            .single();
+
+        if (error || !user) return undefined;
+        return this.mapDbToSession(user);
     }
 
-    public getAllSessions(): Record<number, UserSession> {
-        return this.sessions;
+    private async mapDbToSession(user: any): Promise<UserSession> {
+        const chatId = Number(user.id);
+        const ephemeral = this.ephemeralSessions[chatId] || { photoBuffer: [], bufferTimeout: null };
+
+        // Fetch outfit items from queue
+        const { data: outfitData } = await supabase
+            .from('outfit_queue')
+            .select('*')
+            .eq('user_id', chatId);
+
+        const outfitItems: OutfitItem[] = (outfitData || []).map(item => ({
+            id: item.id,
+            category: item.category as ItemCategory,
+            description: item.description || '',
+            base64: '', // We should probably store storage paths, but for now keeping base64 empty if not needed in memory
+            mimeType: item.mime_type || 'image/jpeg'
+        }));
+
+        // Fetch current model image
+        const { data: modelData } = await supabase
+            .from('model_images')
+            .select('*')
+            .eq('user_id', chatId)
+            .eq('is_current', true)
+            .single();
+
+        return {
+            chatId,
+            username: user.username,
+            state: user.current_state as AppState,
+            language: user.language,
+            modelImage: modelData?.storage_path || null,
+            originalModelImage: null, // Logic for this can be added later
+            modelGender: user.model_gender,
+            outfitItems,
+            lastActivity: new Date(user.last_active_at || Date.now()).getTime(),
+            credits: user.credits,
+            lastMonthlyGrant: user.last_monthly_grant,
+            photoBuffer: ephemeral.photoBuffer,
+            bufferTimeout: ephemeral.bufferTimeout
+        };
     }
 }
 

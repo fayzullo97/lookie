@@ -21,6 +21,8 @@ import {
 } from './services/geminiService';
 import { removeBackgroundPixLab } from './services/pixlabService';
 import { generatePromptChatGPT } from './services/openaiService';
+import { supabase } from './services/supabaseClient';
+import { SupabaseStorageService } from './services/supabaseStorage';
 
 const PORT = process.env.PORT || 3001;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN!;
@@ -168,7 +170,7 @@ const getCategoryName = (lang: Language, category: ItemCategory) => {
 const api = new TelegramService(TELEGRAM_TOKEN);
 
 async function checkMonthlyGrant(chatId: number) {
-    const session = sessionService.getSession(chatId);
+    const session = await sessionService.getSession(chatId);
     if (!session || !session.language) return;
 
     const now = new Date();
@@ -178,7 +180,7 @@ async function checkMonthlyGrant(chatId: number) {
     if (isFirstDay && session.lastMonthlyGrant !== currentMonthKey) {
         const t = TRANSLATIONS[session.language];
         const newCredits = session.credits + MONTHLY_GRANT;
-        sessionService.updateSession(chatId, {
+        await sessionService.updateSession(chatId, {
             credits: newCredits,
             lastMonthlyGrant: currentMonthKey
         });
@@ -187,7 +189,7 @@ async function checkMonthlyGrant(chatId: number) {
 }
 
 async function handleShowBalanceOptions(chatId: number) {
-    const session = sessionService.getSession(chatId);
+    const session = await sessionService.getSession(chatId);
     if (!session || !session.language) return;
     const t = TRANSLATIONS[session.language];
 
@@ -200,7 +202,7 @@ async function handleShowBalanceOptions(chatId: number) {
 }
 
 async function handleSendInvoice(chatId: number, packageId: string) {
-    const session = sessionService.getSession(chatId);
+    const session = await sessionService.getSession(chatId);
     if (!session || !session.language || !PROVIDER_TOKEN) return;
 
     const pkg = PAYMENT_PACKAGES.find(p => `buy_${p.id}` === packageId || p.id === packageId);
@@ -218,32 +220,41 @@ async function handleSendInvoice(chatId: number, packageId: string) {
 }
 
 async function handleResetLook(chatId: number) {
-    const session = sessionService.getSession(chatId);
+    const session = await sessionService.getSession(chatId);
     if (!session) return;
     const lang = session.language || 'uz';
     const t = TRANSLATIONS[lang];
     const restoreImage = session.originalModelImage || session.modelImage;
 
     if (restoreImage) {
-        sessionService.updateSession(chatId, {
+        await sessionService.updateSession(chatId, {
             state: AppState.AWAITING_OUTFITS,
             modelImage: restoreImage,
             outfitItems: []
         });
+
+        // Delete from outfit queue in DB
+        await supabase.from('outfit_queue').delete().eq('user_id', chatId);
+
         await api.sendPhoto(chatId, restoreImage, t.reset_keep_model);
     } else {
-        sessionService.updateSession(chatId, {
+        await sessionService.updateSession(chatId, {
             state: AppState.AWAITING_MODEL_IMAGE,
             modelImage: null,
             originalModelImage: null,
             outfitItems: []
         });
+
+        // Cleanup DB
+        await supabase.from('outfit_queue').delete().eq('user_id', chatId);
+        await supabase.from('model_images').update({ is_current: false }).eq('user_id', chatId);
+
         await api.sendMessage(chatId, t.reset_full);
     }
 }
 
 async function runGeneration(chatId: number, refinement?: string) {
-    const session = sessionService.getSession(chatId);
+    const session = await sessionService.getSession(chatId);
     if (!session || !session.modelImage || !session.language) return;
     const t = TRANSLATIONS[session.language];
 
@@ -254,9 +265,9 @@ async function runGeneration(chatId: number, refinement?: string) {
     }
 
     const newCredits = session.credits - GEN_COST;
-    sessionService.updateSession(chatId, { state: AppState.GENERATING });
+    await sessionService.updateSession(chatId, { state: AppState.GENERATING });
 
-    analytics.trackFunnelStep('gen_req');
+    await analytics.trackFunnelStep('gen_req');
 
     const processingMsg = await api.sendMessage(chatId, t.generating);
 
@@ -282,7 +293,7 @@ async function runGeneration(chatId: number, refinement?: string) {
         }
 
         if (itemsUpdated) {
-            sessionService.updateSession(chatId, { outfitItems: processedItems });
+            await sessionService.updateSession(chatId, { outfitItems: processedItems });
         }
 
         let prompt = "";
@@ -299,28 +310,40 @@ async function runGeneration(chatId: number, refinement?: string) {
             await api.deleteMessage(chatId, processingMsg.result.message_id);
         }
 
-        analytics.trackGeneration(chatId, true);
-        analytics.trackFunnelStep('complete');
+        await analytics.trackGeneration(chatId, true, {
+            prompt,
+            costUsd: 0.04,
+            costCredits: GEN_COST
+        });
+        await analytics.trackFunnelStep('complete');
 
-        sessionService.updateSession(chatId, {
+        await sessionService.updateSession(chatId, {
             state: AppState.COMPLETED,
             modelImage: generatedBase64,
             outfitItems: [],
             credits: newCredits
         });
 
+        // Clear queue in DB
+        await supabase.from('outfit_queue').delete().eq('user_id', chatId);
+
         const buttons = [[{ text: t.reset_btn, callback_data: "reset_session" }]];
         await api.sendPhoto(chatId, generatedBase64, t.gen_caption, buttons);
 
     } catch (error) {
         console.error("Generation error:", error);
-        analytics.trackGeneration(chatId, false);
+        await analytics.trackGeneration(chatId, false, {
+            prompt: 'N/A',
+            costUsd: 0,
+            costCredits: 0,
+            error: (error as any).message
+        });
         await api.sendMessage(chatId, t.gen_error);
     }
 }
 
 async function processBufferedPhotos(chatId: number) {
-    const session = sessionService.getSession(chatId);
+    const session = await sessionService.getSession(chatId);
     if (!session || session.photoBuffer.length === 0) return;
 
     const t = TRANSLATIONS[session.language || 'uz'];
@@ -333,21 +356,42 @@ async function processBufferedPhotos(chatId: number) {
         if (processingMsg?.result?.message_id) await api.deleteMessage(chatId, processingMsg.result.message_id);
 
         if (validation.valid) {
-            analytics.trackModelValidation(chatId, true);
-            analytics.trackFunnelStep('model');
+            await analytics.trackModelValidation(chatId, true);
+            await analytics.trackFunnelStep('model');
 
-            sessionService.updateSession(chatId, {
-                modelImage: lastImage,
-                originalModelImage: lastImage,
-                modelGender: validation.gender,
-                state: AppState.AWAITING_OUTFITS,
-                photoBuffer: []
-            });
-            await api.sendMessage(chatId, t.model_saved);
+            // Upload to Supabase Storage
+            const path = `models/${chatId}/${Date.now()}.jpg`;
+            const publicUrl = await SupabaseStorageService.uploadImage('user-uploads', path, lastImage, 'image/jpeg');
+
+            if (publicUrl) {
+                // Save to DB
+                await supabase.from('model_images').update({ is_current: false }).eq('user_id', chatId);
+                await supabase.from('model_images').insert([{
+                    user_id: chatId,
+                    storage_path: publicUrl,
+                    is_current: true
+                }]);
+
+                await sessionService.updateSession(chatId, {
+                    modelImage: publicUrl,
+                    originalModelImage: publicUrl,
+                    modelGender: validation.gender,
+                    state: AppState.AWAITING_OUTFITS,
+                    photoBuffer: []
+                });
+                await api.sendMessage(chatId, t.model_saved);
+            } else {
+                await api.sendMessage(chatId, "Error saving image to cloud storage.");
+            }
         } else {
-            analytics.trackModelValidation(chatId, false);
-            sessionService.updateSession(chatId, { photoBuffer: [] });
-            await api.sendMessage(chatId, t.invalid_model);
+            await analytics.trackModelValidation(chatId, false);
+            await sessionService.updateSession(chatId, { photoBuffer: [] });
+
+            if (validation.reason === "429_QUOTA_EXCEEDED") {
+                await api.sendMessage(chatId, t.quota_exceeded);
+            } else {
+                await api.sendMessage(chatId, t.invalid_model);
+            }
         }
     }
     else if (session.state === AppState.AWAITING_OUTFITS || session.state === AppState.COMPLETED) {
@@ -358,14 +402,14 @@ async function processBufferedPhotos(chatId: number) {
         if (statusMsg?.result?.message_id) await api.deleteMessage(chatId, statusMsg.result.message_id);
 
         if (batchResults.length > 0 && batchResults[0].description === "429_QUOTA_EXCEEDED") {
-            sessionService.updateSession(chatId, { photoBuffer: [] });
+            await sessionService.updateSession(chatId, { photoBuffer: [] });
             await api.sendMessage(chatId, t.quota_exceeded);
             return;
         }
 
         const prohibitedItem = batchResults.find(r => r.isProhibited);
         if (prohibitedItem) {
-            sessionService.updateSession(chatId, { photoBuffer: [] });
+            await sessionService.updateSession(chatId, { photoBuffer: [] });
             await api.sendMessage(chatId, t.prohibited_content_error);
             return;
         }
@@ -373,7 +417,7 @@ async function processBufferedPhotos(chatId: number) {
         if (session.modelGender) {
             const mismatchItem = batchResults.find(r => r.gender !== 'unisex' && r.gender !== session.modelGender);
             if (mismatchItem) {
-                sessionService.updateSession(chatId, { photoBuffer: [] });
+                await sessionService.updateSession(chatId, { photoBuffer: [] });
                 const errorMsg = t.gender_error
                     .replace('{model}', session.modelGender === 'male' ? 'Male' : 'Female')
                     .replace('{item}', mismatchItem.gender === 'male' ? 'Male' : 'Female');
@@ -382,14 +426,31 @@ async function processBufferedPhotos(chatId: number) {
             }
         }
 
-        const newItems: OutfitItem[] = batchResults.map((res, index) => ({
-            id: Date.now().toString() + Math.random(),
-            category: res.category,
-            description: res.description,
-            base64: imagesToProcess[index],
-            mimeType: 'image/jpeg',
-            containsPerson: res.containsPerson
-        }));
+        const newItems: OutfitItem[] = [];
+        for (let i = 0; i < batchResults.length; i++) {
+            const res = batchResults[i];
+            const path = `items/${chatId}/${Date.now()}_${i}.jpg`;
+            const publicUrl = await SupabaseStorageService.uploadImage('user-uploads', path, imagesToProcess[i], 'image/jpeg');
+
+            if (publicUrl) {
+                const { data: queueItem } = await supabase.from('outfit_queue').insert([{
+                    user_id: chatId,
+                    storage_path: publicUrl,
+                    category: res.category,
+                    description: res.description,
+                    mime_type: 'image/jpeg'
+                }]).select().single();
+
+                newItems.push({
+                    id: queueItem?.id || Date.now().toString(),
+                    category: res.category,
+                    description: res.description,
+                    base64: publicUrl, // Using URL as base64 for now since Gemini service can handle it
+                    mimeType: 'image/jpeg',
+                    containsPerson: res.containsPerson
+                });
+            }
+        }
 
         const currentItems = [...session.outfitItems, ...newItems];
         let nextState = session.state;
@@ -402,14 +463,14 @@ async function processBufferedPhotos(chatId: number) {
             }
         }
 
-        sessionService.updateSession(chatId, {
+        await sessionService.updateSession(chatId, {
             outfitItems: currentItems,
             photoBuffer: [],
             state: nextState,
             modelImage: nextModelImage
         });
 
-        analytics.trackFunnelStep('outfit');
+        await analytics.trackFunnelStep('outfit');
 
         const categoryNames = newItems.map(i => {
             let name = getCategoryName(session.language!, i.category);
@@ -427,7 +488,7 @@ async function processBufferedPhotos(chatId: number) {
             { inlineKeyboard: buttons }
         );
     } else {
-        sessionService.updateSession(chatId, { photoBuffer: [] });
+        await sessionService.updateSession(chatId, { photoBuffer: [] });
     }
 }
 
@@ -442,21 +503,21 @@ async function processUpdate(update: TelegramUpdate) {
         const chatId = cb.message?.chat.id;
         if (chatId) {
             await api.answerCallbackQuery(cb.id);
-            const session = sessionService.getOrCreateSession(chatId, { username: (cb.from as any).username } as any);
+            const session = await sessionService.getOrCreateSession(chatId, { username: (cb.from as any).username });
 
             if (cb.data === 'lang_uz' || cb.data === 'lang_ru') {
                 const selectedLang = cb.data === 'lang_uz' ? 'uz' : 'ru';
                 const t = TRANSLATIONS[selectedLang];
                 const credits = session.credits;
 
-                sessionService.updateSession(chatId, { language: selectedLang });
+                await sessionService.updateSession(chatId, { language: selectedLang });
 
                 if (session.modelImage) {
                     await api.sendMessage(chatId, t.lang_updated, { keyboard: getMenuKeyboard(selectedLang, credits) });
                     const inlineBtns = [[{ text: t.btn_change_model, callback_data: 'change_model_inline' }]];
                     await api.sendPhoto(chatId, session.modelImage, t.existing_model_found, inlineBtns);
                 } else {
-                    sessionService.updateSession(chatId, { state: AppState.AWAITING_MODEL_IMAGE });
+                    await sessionService.updateSession(chatId, { state: AppState.AWAITING_MODEL_IMAGE });
                     await api.sendMessage(chatId, t.welcome_start, { keyboard: getMenuKeyboard(selectedLang, credits) });
                 }
                 return;
@@ -464,12 +525,16 @@ async function processUpdate(update: TelegramUpdate) {
 
             if (cb.data === 'change_model_inline') {
                 const t = TRANSLATIONS[session.language || 'uz'];
-                sessionService.updateSession(chatId, {
+                await sessionService.updateSession(chatId, {
                     state: AppState.AWAITING_MODEL_IMAGE,
                     modelImage: null,
                     originalModelImage: null,
                     outfitItems: []
                 });
+                // Cleanup DB
+                await supabase.from('model_images').update({ is_current: false }).eq('user_id', chatId);
+                await supabase.from('outfit_queue').delete().eq('user_id', chatId);
+
                 await api.sendMessage(chatId, t.change_model_msg);
                 return;
             }
@@ -501,17 +566,17 @@ async function processUpdate(update: TelegramUpdate) {
     const text = msg.text;
     const photos = msg.photo;
 
-    const session = sessionService.getOrCreateSession(chatId, { username: msg.from.username } as any);
+    const session = await sessionService.getOrCreateSession(chatId, { username: msg.from.username });
     await checkMonthlyGrant(chatId);
-    analytics.trackUserActivity(chatId, { username: msg.from.username, firstName: msg.from.first_name });
+    await analytics.trackUserActivity(chatId, { username: msg.from.username, firstName: msg.from.first_name });
 
     if (msg.successful_payment) {
         const payload = msg.successful_payment.invoice_payload;
         const pkg = PAYMENT_PACKAGES.find(p => p.id === payload);
         if (pkg && session.language) {
             const newCredits = session.credits + pkg.credits;
-            sessionService.updateSession(chatId, { credits: newCredits });
-            analytics.trackPayment(chatId, msg.successful_payment.total_amount / 100, pkg.credits);
+            await sessionService.updateSession(chatId, { credits: newCredits });
+            await analytics.trackPayment(chatId, msg.successful_payment.total_amount / 100, pkg.credits, msg.successful_payment.invoice_payload);
 
             const t = TRANSLATIONS[session.language];
             await api.sendMessage(chatId, t.purchase_success.replace('{amount}', pkg.credits.toString()), {
@@ -522,7 +587,7 @@ async function processUpdate(update: TelegramUpdate) {
     }
 
     if (text === '/start' || text === '/reset') {
-        sessionService.updateSession(chatId, { state: AppState.AWAITING_LANGUAGE });
+        await sessionService.updateSession(chatId, { state: AppState.AWAITING_LANGUAGE });
         const keyboard = [[
             { text: "🇺🇿 O'zbekcha", callback_data: "lang_uz" },
             { text: "🇷🇺 Русский", callback_data: "lang_ru" }
@@ -549,17 +614,21 @@ async function processUpdate(update: TelegramUpdate) {
         return;
     }
     if (text === t.menu_model) {
-        sessionService.updateSession(chatId, {
+        await sessionService.updateSession(chatId, {
             state: AppState.AWAITING_MODEL_IMAGE,
             modelImage: null,
             originalModelImage: null,
             outfitItems: []
         });
+        // Cleanup DB
+        await supabase.from('model_images').update({ is_current: false }).eq('user_id', chatId);
+        await supabase.from('outfit_queue').delete().eq('user_id', chatId);
+
         await api.sendMessage(chatId, t.change_model_msg);
         return;
     }
     if (text === t.menu_lang) {
-        sessionService.updateSession(chatId, { state: AppState.AWAITING_LANGUAGE });
+        await sessionService.updateSession(chatId, { state: AppState.AWAITING_LANGUAGE });
         const keyboard = [[
             { text: "🇺🇿 O'zbekcha", callback_data: "lang_uz" },
             { text: "🇷🇺 Русский", callback_data: "lang_ru" }
@@ -620,21 +689,23 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.get('/metrics', (req: express.Request, res: express.Response) => {
+app.get('/metrics', async (req: express.Request, res: express.Response) => {
     const filter = (req.query.filter as any) || 'all';
-    res.json(analytics.getMetrics(filter));
+    res.json(await analytics.getMetrics(filter));
 });
 
-app.get('/profiles', (_req: express.Request, res: express.Response) => {
-    res.json(analytics.getUserProfiles());
+app.get('/profiles', async (_req: express.Request, res: express.Response) => {
+    res.json(await analytics.getUserProfiles());
 });
 
 app.post('/gift', async (req: express.Request, res: express.Response) => {
     const { chatId, amount } = req.body;
-    const session = sessionService.getSession(chatId);
+    const session = await sessionService.getSession(chatId);
     if (session) {
         const newCredits = session.credits + amount;
-        sessionService.updateSession(chatId, { credits: newCredits });
+        await sessionService.updateSession(chatId, { credits: newCredits });
+
+        await analytics.trackPayment(chatId, 0, amount, 'GIFT_FROM_ADMIN');
 
         const lang = session.language || 'uz';
         const t = TRANSLATIONS[lang];
