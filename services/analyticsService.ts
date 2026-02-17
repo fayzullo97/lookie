@@ -1,7 +1,7 @@
 
 import { AnalyticsMetrics, UserAnalyticsProfile, DateRangeFilter } from "../types";
 
-const API_BASE = 'http://localhost:3001'; // Default bot server URL
+const API_BASE = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
 class AnalyticsService {
   public async getMetrics(filter: DateRangeFilter = 'all'): Promise<AnalyticsMetrics> {
