@@ -1,0 +1,17 @@
+node_modules/
+.DS_Store
+.env
+.env.local
+dist/
+.vscode/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Bot Server
+bot-server/node_modules/
+bot-server/data/
+bot-server/dist/
+
+# Secrets
+config.ts
