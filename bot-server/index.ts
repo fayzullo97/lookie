@@ -234,7 +234,8 @@ async function handleResetLook(chatId: number) {
         });
 
         // Delete from outfit queue in DB
-        await supabase.from('outfit_queue').delete().eq('user_id', chatId);
+        const { error: delErr } = await supabase.from('outfit_queue').delete().eq('user_id', chatId);
+        if (delErr) console.error(`[DB] Error deleting outfit queue for ${chatId}:`, delErr.message);
 
         await api.sendPhoto(chatId, restoreImage, t.reset_keep_model);
     } else {
@@ -246,8 +247,10 @@ async function handleResetLook(chatId: number) {
         });
 
         // Cleanup DB
-        await supabase.from('outfit_queue').delete().eq('user_id', chatId);
-        await supabase.from('model_images').update({ is_current: false }).eq('user_id', chatId);
+        const { error: delErr2 } = await supabase.from('outfit_queue').delete().eq('user_id', chatId);
+        if (delErr2) console.error(`[DB] Error deleting outfit queue for ${chatId}:`, delErr2.message);
+        const { error: updErr } = await supabase.from('model_images').update({ is_current: false }).eq('user_id', chatId);
+        if (updErr) console.error(`[DB] Error resetting model images for ${chatId}:`, updErr.message);
 
         await api.sendMessage(chatId, t.reset_full);
     }
@@ -325,7 +328,8 @@ async function runGeneration(chatId: number, refinement?: string) {
         });
 
         // Clear queue in DB
-        await supabase.from('outfit_queue').delete().eq('user_id', chatId);
+        const { error: clearErr } = await supabase.from('outfit_queue').delete().eq('user_id', chatId);
+        if (clearErr) console.error(`[DB] Error clearing outfit queue after generation for ${chatId}:`, clearErr.message);
 
         const buttons = [[{ text: t.reset_btn, callback_data: "reset_session" }]];
         await api.sendPhoto(chatId, generatedBase64, t.gen_caption, buttons);
@@ -443,7 +447,7 @@ async function processBufferedPhotos(chatId: number) {
                 const publicUrl = await SupabaseStorageService.uploadImage('user-uploads', path, imagesToProcess[i], 'image/jpeg');
 
                 if (publicUrl) {
-                    const { data: queueItem } = await supabase.from('outfit_queue').insert([{
+                    const { data: queueItem, error: queueError } = await supabase.from('outfit_queue').insert([{
                         user_id: chatId,
                         storage_path: publicUrl,
                         category: res.category,
@@ -451,11 +455,17 @@ async function processBufferedPhotos(chatId: number) {
                         mime_type: 'image/jpeg'
                     }]).select().single();
 
+                    if (queueError) {
+                        console.error(`[DB] ❌ Failed to insert outfit queue item for ${chatId}:`, queueError.message);
+                    } else {
+                        console.log(`[DB] ✅ Outfit item queued for ${chatId}: ${res.category}`);
+                    }
+
                     newItems.push({
                         id: queueItem?.id || Date.now().toString(),
                         category: res.category,
                         description: res.description,
-                        base64: publicUrl, // Using URL as base64 for now since Gemini service can handle it
+                        base64: publicUrl,
                         mimeType: 'image/jpeg',
                         containsPerson: res.containsPerson
                     });
@@ -567,8 +577,10 @@ async function processUpdate(update: TelegramUpdate) {
                     outfitItems: []
                 });
                 // Cleanup DB
-                await supabase.from('model_images').update({ is_current: false }).eq('user_id', chatId);
-                await supabase.from('outfit_queue').delete().eq('user_id', chatId);
+                const { error: e1 } = await supabase.from('model_images').update({ is_current: false }).eq('user_id', chatId);
+                if (e1) console.error(`[DB] Error resetting model images:`, e1.message);
+                const { error: e2 } = await supabase.from('outfit_queue').delete().eq('user_id', chatId);
+                if (e2) console.error(`[DB] Error clearing outfit queue:`, e2.message);
 
                 await api.sendMessage(chatId, t.change_model_msg);
                 return;
@@ -656,8 +668,10 @@ async function processUpdate(update: TelegramUpdate) {
             outfitItems: []
         });
         // Cleanup DB
-        await supabase.from('model_images').update({ is_current: false }).eq('user_id', chatId);
-        await supabase.from('outfit_queue').delete().eq('user_id', chatId);
+        const { error: e3 } = await supabase.from('model_images').update({ is_current: false }).eq('user_id', chatId);
+        if (e3) console.error(`[DB] Error resetting model images:`, e3.message);
+        const { error: e4 } = await supabase.from('outfit_queue').delete().eq('user_id', chatId);
+        if (e4) console.error(`[DB] Error clearing outfit queue:`, e4.message);
 
         await api.sendMessage(chatId, t.change_model_msg);
         return;

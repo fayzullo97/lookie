@@ -98,5 +98,14 @@ ALTER TABLE outfit_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE generations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 
--- Simple policy: All operations allowed for the bot server (using service role)
--- but for specific dashboard users, you would add more restrictive policies.
+-- Service role bypasses RLS automatically.
+-- These policies allow the bot server to work even with the anon key (as safety net).
+CREATE POLICY "Allow all for service" ON users FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for service" ON model_images FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for service" ON outfit_queue FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for service" ON generations FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for service" ON transactions FOR ALL USING (true) WITH CHECK (true);
+
+-- Storage: Create buckets via UI or API:
+-- Bucket: user-uploads (set to PUBLIC for image URLs to work)
+-- Bucket: generated-results (set to PUBLIC)
