@@ -564,11 +564,22 @@ async function processUpdate(update: TelegramUpdate) {
 
                 await sessionService.updateSession(chatId, { language: selectedLang });
 
+                console.log(`[FLOW] Lang set to ${selectedLang}. Model image: ${session.modelImage}`);
+
+                let sentModel = false;
                 if (session.modelImage) {
-                    await api.sendMessage(chatId, t.lang_updated, { keyboard: getMenuKeyboard(selectedLang, credits) });
-                    const inlineBtns = [[{ text: t.btn_change_model, callback_data: 'change_model_inline' }]];
-                    await api.sendPhoto(chatId, session.modelImage, t.existing_model_found, inlineBtns);
-                } else {
+                    try {
+                        await api.sendMessage(chatId, t.lang_updated, { keyboard: getMenuKeyboard(selectedLang, credits) });
+                        const inlineBtns = [[{ text: t.btn_change_model, callback_data: 'change_model_inline' }]];
+                        await api.sendPhoto(chatId, session.modelImage, t.existing_model_found, inlineBtns);
+                        sentModel = true;
+                    } catch (sendErr) {
+                        console.error(`[FLOW] Failed to send existing model image:`, sendErr);
+                        // Fallback to asking for new image
+                    }
+                }
+
+                if (!sentModel) {
                     await sessionService.updateSession(chatId, { state: AppState.AWAITING_MODEL_IMAGE });
                     await api.sendMessage(chatId, t.welcome_start, { keyboard: getMenuKeyboard(selectedLang, credits) });
                 }
