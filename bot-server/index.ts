@@ -366,7 +366,7 @@ async function processBufferedPhotos(chatId: number) {
 
                 // Upload to Supabase Storage
                 const path = `models/${chatId}/${Date.now()}.jpg`;
-                const publicUrl = await SupabaseStorageService.uploadImage('user-uploads', path, lastImage, 'image/jpeg');
+                const { url: publicUrl, error: uploadErr } = await SupabaseStorageService.uploadImage('user-uploads', path, lastImage, 'image/jpeg');
 
                 if (publicUrl) {
                     // Save to DB
@@ -395,7 +395,7 @@ async function processBufferedPhotos(chatId: number) {
                     });
                     await api.sendMessage(chatId, t.model_saved);
                 } else {
-                    await api.sendMessage(chatId, "Error saving image to cloud storage.");
+                    await api.sendMessage(chatId, `⚠️ Error saving image: ${uploadErr || 'Unknown error'}`);
                 }
             } else {
                 await analytics.trackModelValidation(chatId, false);
@@ -444,7 +444,7 @@ async function processBufferedPhotos(chatId: number) {
             for (let i = 0; i < batchResults.length; i++) {
                 const res = batchResults[i];
                 const path = `items/${chatId}/${Date.now()}_${i}.jpg`;
-                const publicUrl = await SupabaseStorageService.uploadImage('user-uploads', path, imagesToProcess[i], 'image/jpeg');
+                const { url: publicUrl, error: uploadErr } = await SupabaseStorageService.uploadImage('user-uploads', path, imagesToProcess[i], 'image/jpeg');
 
                 if (publicUrl) {
                     const { data: queueItem, error: queueError } = await supabase.from('outfit_queue').insert([{
@@ -469,6 +469,9 @@ async function processBufferedPhotos(chatId: number) {
                         mimeType: 'image/jpeg',
                         containsPerson: res.containsPerson
                     });
+                } else {
+                    console.error(`[PROCESS] Failed to upload outfit item ${i}: ${uploadErr}`);
+                    if (i === 0) await api.sendMessage(chatId, `⚠️ Error saving item: ${uploadErr}`);
                 }
             }
 

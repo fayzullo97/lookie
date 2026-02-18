@@ -3,17 +3,18 @@ import { supabase } from "./supabaseClient";
 import { decode } from 'base64-arraybuffer';
 
 export class SupabaseStorageService {
-    public static async uploadImage(bucket: string, path: string, base64Data: string, mimeType: string): Promise<string | null> {
+    public static async uploadImage(bucket: string, path: string, base64Data: string, mimeType: string): Promise<{ url: string | null, error: string | null }> {
         try {
             // Remove data:image/jpeg;base64, prefix if present
             const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
 
             if (!cleanBase64 || cleanBase64.length < 100) {
-                console.error(`[STORAGE] ❌ Image data too small or empty for path: ${path} (length: ${cleanBase64.length})`);
-                return null;
+                const msg = `Image data too small (len=${cleanBase64?.length})`;
+                console.error(`[STORAGE] ❌ ${msg}`);
+                return { url: null, error: msg };
             }
 
-            console.log(`[STORAGE] Uploading to bucket '${bucket}', path: '${path}' (${Math.round(cleanBase64.length / 1024)}KB)...`);
+            console.log(`[STORAGE] Uploading to bucket '${bucket}', path: '${path}'...`);
 
             const { data, error } = await supabase.storage
                 .from(bucket)
@@ -23,26 +24,22 @@ export class SupabaseStorageService {
                 });
 
             if (error) {
-                console.error(`[STORAGE] ❌ Upload failed for ${bucket}/${path}:`, error.message, error.name);
-                if (error.message.includes('Bucket not found')) {
-                    console.error(`[STORAGE] 💡 Bucket '${bucket}' does not exist. Create it in Supabase Dashboard → Storage.`);
-                }
-                if (error.message.includes('row-level security') || error.message.includes('Unauthorized')) {
-                    console.error(`[STORAGE] 💡 RLS or auth issue. Check that SUPABASE_SERVICE_ROLE_KEY is the service_role key, not the anon key.`);
-                }
-                return null;
+                console.error(`[STORAGE] ❌ Upload failed:`, error.message);
+                let userError = `Upload failed: ${error.message}`;
+                if (error.message.includes('Bucket not found')) userError += " (Check Supabase Dashboard)";
+                if (error.message.includes('security')) userError += " (Check .env Key)";
+                return { url: null, error: userError };
             }
 
-            // Return the public URL
             const { data: { publicUrl } } = supabase.storage
                 .from(bucket)
                 .getPublicUrl(data.path);
 
-            console.log(`[STORAGE] ✅ Uploaded successfully: ${publicUrl}`);
-            return publicUrl;
+            console.log(`[STORAGE] ✅ Uploaded: ${publicUrl}`);
+            return { url: publicUrl, error: null };
         } catch (err: any) {
-            console.error("[STORAGE] ❌ Upload exception:", err.message || err);
-            return null;
+            console.error("[STORAGE] ❌ Exception:", err.message);
+            return { url: null, error: err.message || "Unknown storage error" };
         }
     }
 }
