@@ -17,7 +17,8 @@ import {
 import {
     validateModelImage,
     categorizeOutfitItemsBatch,
-    generateTryOnImage
+    generateTryOnImage,
+    isolateClothingItem
 } from './services/geminiService';
 import { removeBackgroundPixLab } from './services/pixlabService';
 import { generatePromptChatGPT } from './services/openaiService';
@@ -282,16 +283,45 @@ async function runGeneration(chatId: number, refinement?: string) {
         for (let i = 0; i < processedItems.length; i++) {
             const item = processedItems[i];
             if ([ItemCategory.OUTFIT, ItemCategory.SHOES, ItemCategory.HAT, ItemCategory.ACCESSORY, ItemCategory.HANDBAG].includes(item.category)) {
-                try {
-                    const cleanBase64 = await removeBackgroundPixLab(PIXLAB_KEY, item.base64, USE_MOCK_AI);
-                    processedItems[i] = {
-                        ...item,
-                        base64: cleanBase64,
-                        mimeType: 'image/png'
-                    };
-                    itemsUpdated = true;
-                } catch (pixError) {
-                    console.error(`PixLab failed for item ${i}. Using original.`, pixError);
+                // If the item contains a person, we MUST isolate the clothing (remove person + background)
+                // per user requirement: "1. remove image background 2. ignore model"
+                if (item.containsPerson) {
+                    try {
+                        console.log(`[GENERATE] Isolating clothing for item ${i} (contains person)...`);
+                        // Ensure base64 is loaded if it's a URL
+                        let rawBase64 = item.base64;
+                        if (rawBase64.startsWith('http')) {
+                            const res = await fetch(rawBase64);
+                            if (res.ok) {
+                                const buf = await res.arrayBuffer();
+                                rawBase64 = Buffer.from(buf).toString('base64');
+                            }
+                        }
+
+                        const isolatedBase64 = await isolateClothingItem(GEMINI_KEY, rawBase64, item.description, USE_MOCK_AI);
+                        processedItems[i] = {
+                            ...item,
+                            base64: isolatedBase64,
+                            mimeType: 'image/jpeg',
+                            containsPerson: false // It's isolated now
+                        };
+                        itemsUpdated = true;
+                    } catch (isoError) {
+                        console.error(`[GENERATE] Isolation failed for item ${i}. Using original.`, isoError);
+                    }
+                } else if (PIXLAB_KEY) {
+                    // Start of legacy PixLab support (Optional)
+                    try {
+                        const cleanBase64 = await removeBackgroundPixLab(PIXLAB_KEY, item.base64, USE_MOCK_AI);
+                        processedItems[i] = {
+                            ...item,
+                            base64: cleanBase64,
+                            mimeType: 'image/png'
+                        };
+                        itemsUpdated = true;
+                    } catch (pixError) {
+                        console.error(`PixLab failed for item ${i}. Using original.`, pixError);
+                    }
                 }
             }
         }
