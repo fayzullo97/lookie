@@ -30,7 +30,8 @@ const PROVIDER_TOKEN = process.env.PROVIDER_TOKEN || '';
 const OPENAI_KEY = process.env.OPENAI_KEY || '';
 const GEMINI_KEY = process.env.GEMINI_KEY || '';
 const PIXLAB_KEY = process.env.PIXLAB_KEY || '';
-const USE_MOCK_AI = process.env.USE_MOCK_AI === 'true';
+const USE_MOCK_AI = false; // Force real AI for now to debug 'original image' issue
+
 
 const GEN_COST = 10;
 const MONTHLY_GRANT = 30;
@@ -342,16 +343,17 @@ async function runGeneration(chatId: number, refinement?: string) {
 
         const generatedBase64 = await generateTryOnImage(GEMINI_KEY, base64Model, base64Items, prompt, USE_MOCK_AI);
 
-        if (processingMsg?.result?.message_id) {
-            await api.deleteMessage(chatId, processingMsg.result.message_id);
+        if (!generatedBase64) throw new Error("Generated image is empty");
+        if (!USE_MOCK_AI && generatedBase64 === base64Model) {
+            console.error("[GENERATE] ⚠️ WARNING: Generated image is IDENTICAL to input model!");
         }
 
-        await analytics.trackGeneration(chatId, true, {
-            prompt,
-            costUsd: 0.04,
-            costCredits: GEN_COST
-        });
-        await analytics.trackFunnelStep('complete');
+        console.log(`[GENERATE] Success. Updating session credits: ${session.credits} -> ${newCredits}`);
+
+        if (isNaN(newCredits)) {
+            console.error("[GENERATE] ❌ Critical: newCredits is NaN!", { old: session.credits, cost: GEN_COST });
+            throw new Error("Credit calculation error");
+        }
 
         await sessionService.updateSession(chatId, {
             state: AppState.COMPLETED,
@@ -360,12 +362,17 @@ async function runGeneration(chatId: number, refinement?: string) {
             credits: newCredits
         });
 
+        // Verify update
+        const verifySession = await sessionService.getSession(chatId);
+        console.log(`[GENERATE] Session verified credits: ${verifySession?.credits}`);
+
         // Clear queue in DB
         const { error: clearErr } = await supabase.from('outfit_queue').delete().eq('user_id', chatId);
         if (clearErr) console.error(`[DB] Error clearing outfit queue after generation for ${chatId}:`, clearErr.message);
 
         const buttons = [[{ text: t.reset_btn, callback_data: "reset_session" }]];
         await api.sendPhoto(chatId, generatedBase64, t.gen_caption, buttons);
+
 
     } catch (error) {
         console.error("Generation error:", error);
