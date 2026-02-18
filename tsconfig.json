@@ -24,6 +24,7 @@
     "**/*.tsx"
   ],
   "exclude": [
-    "bot-server"
+    "bot-server",
+    "virtual-try-on-bot"
   ]
 }
