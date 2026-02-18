@@ -1,7 +1,0 @@
-{
-  "name": "Virtual Try-On Bot",
-  "description": "A chat-based AI stylist that helps users try on outfits using their own photo.",
-  "requestFramePermissions": [
-    "camera"
-  ]
-}

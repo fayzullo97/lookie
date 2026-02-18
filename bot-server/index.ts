@@ -370,7 +370,7 @@ async function processBufferedPhotos(chatId: number) {
 
         const t = TRANSLATIONS[session.language || 'uz'];
 
-        if (session.state === AppState.AWAITING_MODEL_IMAGE || session.state === AppState.NEW_USER) {
+        if (session.state === AppState.AWAITING_MODEL_IMAGE || session.state === AppState.NEW_USER || session.state === AppState.AWAITING_LANGUAGE) {
             const lastImage = session.photoBuffer[session.photoBuffer.length - 1];
             const processingMsg = await api.sendMessage(chatId, t.processing_model);
             const validation = await validateModelImage(GEMINI_KEY, lastImage, USE_MOCK_AI);
@@ -529,16 +529,6 @@ async function processBufferedPhotos(chatId: number) {
             );
         } else {
             console.log(`[PROCESS] Ignoring photos for ${chatId} due to state: ${session.state}`);
-            // If state is AWAITING_LANGUAGE, maybe remind user?
-            if (session.state === AppState.AWAITING_LANGUAGE) {
-                const t = TRANSLATIONS[session.language || 'uz'];
-                await api.sendMessage(chatId, t.welcome_ask_lang, {
-                    inlineKeyboard: [[
-                        { text: "🇺🇿 O'zbekcha", callback_data: "lang_uz" },
-                        { text: "🇷🇺 Русский", callback_data: "lang_ru" }
-                    ]]
-                });
-            }
             await sessionService.updateSession(chatId, { photoBuffer: [] });
         }
     } catch (err: any) {
@@ -579,13 +569,13 @@ async function processUpdate(update: TelegramUpdate) {
                 const t = TRANSLATIONS[selectedLang];
                 const credits = session.credits;
 
-                await sessionService.updateSession(chatId, { language: selectedLang });
-
                 console.log(`[FLOW] Lang set to ${selectedLang}. Model image: ${session.modelImage}`);
 
                 let sentModel = false;
                 if (session.modelImage) {
                     try {
+                        // Merge language + state update into one atomic call
+                        await sessionService.updateSession(chatId, { language: selectedLang, state: AppState.AWAITING_OUTFITS });
                         await api.sendMessage(chatId, t.lang_updated, { keyboard: getMenuKeyboard(selectedLang, credits) });
                         const inlineBtns = [[{ text: t.btn_change_model, callback_data: 'change_model_inline' }]];
                         await api.sendPhoto(chatId, session.modelImage, t.existing_model_found, inlineBtns);
@@ -597,7 +587,8 @@ async function processUpdate(update: TelegramUpdate) {
                 }
 
                 if (!sentModel) {
-                    await sessionService.updateSession(chatId, { state: AppState.AWAITING_MODEL_IMAGE });
+                    // Merge language + state update into one atomic call
+                    await sessionService.updateSession(chatId, { language: selectedLang, state: AppState.AWAITING_MODEL_IMAGE });
                     await api.sendMessage(chatId, t.welcome_start, { keyboard: getMenuKeyboard(selectedLang, credits) });
                 }
                 return;
