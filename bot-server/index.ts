@@ -316,14 +316,31 @@ async function runGeneration(chatId: number, refinement?: string) {
                     base64Model = Buffer.from(arrBuff).toString('base64');
                 } else {
                     console.error(`[GENERATE] Failed to fetch model image from URL: ${base64Model}`);
-                    // Fallback to original, hoping it's base64/valid or handle error
                 }
             } catch (fetchErr) {
                 console.error(`[GENERATE] Exception fetching model image:`, fetchErr);
             }
         }
 
-        const generatedBase64 = await generateTryOnImage(GEMINI_KEY, base64Model, processedItems, prompt, USE_MOCK_AI);
+        // Convert outfit item URLs to base64 (items are stored as Supabase public URLs)
+        const base64Items = await Promise.all(processedItems.map(async (item, i) => {
+            if (item.base64?.startsWith('http')) {
+                try {
+                    const res = await fetch(item.base64);
+                    if (res.ok) {
+                        const buf = await res.arrayBuffer();
+                        return { ...item, base64: Buffer.from(buf).toString('base64'), mimeType: 'image/jpeg' };
+                    } else {
+                        console.error(`[GENERATE] Failed to fetch outfit item ${i} from URL: ${item.base64}`);
+                    }
+                } catch (fetchErr) {
+                    console.error(`[GENERATE] Exception fetching outfit item ${i}:`, fetchErr);
+                }
+            }
+            return item;
+        }));
+
+        const generatedBase64 = await generateTryOnImage(GEMINI_KEY, base64Model, base64Items, prompt, USE_MOCK_AI);
 
         if (processingMsg?.result?.message_id) {
             await api.deleteMessage(chatId, processingMsg.result.message_id);
