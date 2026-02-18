@@ -524,15 +524,19 @@ async function processBufferedPhotos(chatId: number) {
             }
             await sessionService.updateSession(chatId, { photoBuffer: [] });
         }
-    } catch (err) {
+    } catch (err: any) {
         console.error(`[PROCESS] Global error in processBufferedPhotos for ${chatId}:`, err);
         // Try to notify the user if possible
         try {
             const session = await sessionService.getSession(chatId);
-            if (session && session.language) {
-                const t = TRANSLATIONS[session.language];
-                await api.sendMessage(chatId, t.gen_error);
-            }
+            // Send EXACT error for debugging
+            await api.sendMessage(chatId, `⚠️ Xatolik (Debug): ${err.message || 'Unknown error'}`);
+
+            // Fallback to generic message if needed later
+            // if (session && session.language) {
+            //     const t = TRANSLATIONS[session.language];
+            //     await api.sendMessage(chatId, t.gen_error);
+            // }
             await sessionService.updateSession(chatId, { photoBuffer: [] });
         } catch (innerErr) {
             console.error("[PROCESS] Error recovery failed:", innerErr);
