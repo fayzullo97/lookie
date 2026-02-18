@@ -9,7 +9,7 @@
         "build": "tsc"
     },
     "dependencies": {
-        "@google/generative-ai": "^0.24.1",
+        "@google/genai": "^1.41.0",
         "@supabase/supabase-js": "^2.96.0",
         "@types/base64-arraybuffer": "^0.1.0",
         "base64-arraybuffer": "^1.0.2",

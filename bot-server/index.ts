@@ -307,7 +307,23 @@ async function runGeneration(chatId: number, refinement?: string) {
             prompt = await generatePromptChatGPT(OPENAI_KEY, processedItems, refinement);
         }
 
-        const generatedBase64 = await generateTryOnImage(GEMINI_KEY, session.modelImage, processedItems, prompt, USE_MOCK_AI);
+        let base64Model = session.modelImage;
+        if (base64Model?.startsWith('http')) {
+            try {
+                const modelRes = await fetch(base64Model);
+                if (modelRes.ok) {
+                    const arrBuff = await modelRes.arrayBuffer();
+                    base64Model = Buffer.from(arrBuff).toString('base64');
+                } else {
+                    console.error(`[GENERATE] Failed to fetch model image from URL: ${base64Model}`);
+                    // Fallback to original, hoping it's base64/valid or handle error
+                }
+            } catch (fetchErr) {
+                console.error(`[GENERATE] Exception fetching model image:`, fetchErr);
+            }
+        }
+
+        const generatedBase64 = await generateTryOnImage(GEMINI_KEY, base64Model, processedItems, prompt, USE_MOCK_AI);
 
         if (processingMsg?.result?.message_id) {
             await api.deleteMessage(chatId, processingMsg.result.message_id);
