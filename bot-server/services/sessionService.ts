@@ -32,10 +32,14 @@ class SessionService {
                 .single();
 
             if (createError) {
-                console.error("Error creating user:", createError);
+                console.error(`[DB] Error creating user ${chatId}:`, createError);
                 // Fallback to minimal session if DB fails (not ideal)
+            } else {
+                console.log(`[DB] Created new user ${chatId} in Supabase.`);
             }
             user = created || newUser;
+        } else {
+            console.log(`[DB] User ${chatId} found in Supabase.`);
         }
 
         // Initialize ephemeral state if needed

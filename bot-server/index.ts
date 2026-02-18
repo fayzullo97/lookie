@@ -366,12 +366,21 @@ async function processBufferedPhotos(chatId: number) {
 
                 if (publicUrl) {
                     // Save to DB
-                    await supabase.from('model_images').update({ is_current: false }).eq('user_id', chatId);
-                    await supabase.from('model_images').insert([{
+                    const { error: updateError } = await supabase.from('model_images').update({ is_current: false }).eq('user_id', chatId);
+                    if (updateError) console.error(`[DB] Error resetting old model images for ${chatId}:`, updateError);
+
+                    const { error: insertError } = await supabase.from('model_images').insert([{
                         user_id: chatId,
                         storage_path: publicUrl,
                         is_current: true
                     }]);
+
+                    if (insertError) {
+                        console.error(`[DB] Error saving model image for ${chatId}:`, insertError);
+                        throw new Error("Failed to save model image to DB");
+                    }
+
+                    console.log(`[DB] Model image saved to DB for ${chatId}.`);
 
                     await sessionService.updateSession(chatId, {
                         modelImage: publicUrl,
@@ -750,7 +759,16 @@ app.post('/gift', async (req: express.Request, res: express.Response) => {
     }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log(`Bot analytics server running on port ${PORT}`);
+
+    // Check DB connection
+    const { count, error } = await supabase.from('users').select('*', { count: 'exact', head: true });
+    if (error) {
+        console.error("❌ CRITICAL: Could not connect to Supabase!", error);
+    } else {
+        console.log("✅ Supabase connection verified.");
+    }
+
     poll();
 });
