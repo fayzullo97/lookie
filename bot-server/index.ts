@@ -343,152 +343,178 @@ async function runGeneration(chatId: number, refinement?: string) {
 }
 
 async function processBufferedPhotos(chatId: number) {
-    const session = await sessionService.getSession(chatId);
-    if (!session || session.photoBuffer.length === 0) return;
+    try {
+        const session = await sessionService.getSession(chatId);
+        if (!session || !session.photoBuffer || session.photoBuffer.length === 0) return;
 
-    const t = TRANSLATIONS[session.language || 'uz'];
+        const t = TRANSLATIONS[session.language || 'uz'];
 
-    if (session.state === AppState.AWAITING_MODEL_IMAGE || session.state === AppState.NEW_USER) {
-        const lastImage = session.photoBuffer[session.photoBuffer.length - 1];
-        const processingMsg = await api.sendMessage(chatId, t.processing_model);
-        const validation = await validateModelImage(GEMINI_KEY, lastImage, USE_MOCK_AI);
+        if (session.state === AppState.AWAITING_MODEL_IMAGE || session.state === AppState.NEW_USER) {
+            const lastImage = session.photoBuffer[session.photoBuffer.length - 1];
+            const processingMsg = await api.sendMessage(chatId, t.processing_model);
+            const validation = await validateModelImage(GEMINI_KEY, lastImage, USE_MOCK_AI);
 
-        if (processingMsg?.result?.message_id) await api.deleteMessage(chatId, processingMsg.result.message_id);
+            if (processingMsg?.result?.message_id) await api.deleteMessage(chatId, processingMsg.result.message_id);
 
-        if (validation.valid) {
-            await analytics.trackModelValidation(chatId, true);
-            await analytics.trackFunnelStep('model');
+            if (validation.valid) {
+                await analytics.trackModelValidation(chatId, true);
+                await analytics.trackFunnelStep('model');
 
-            // Upload to Supabase Storage
-            const path = `models/${chatId}/${Date.now()}.jpg`;
-            const publicUrl = await SupabaseStorageService.uploadImage('user-uploads', path, lastImage, 'image/jpeg');
+                // Upload to Supabase Storage
+                const path = `models/${chatId}/${Date.now()}.jpg`;
+                const publicUrl = await SupabaseStorageService.uploadImage('user-uploads', path, lastImage, 'image/jpeg');
 
-            if (publicUrl) {
-                // Save to DB
-                await supabase.from('model_images').update({ is_current: false }).eq('user_id', chatId);
-                await supabase.from('model_images').insert([{
-                    user_id: chatId,
-                    storage_path: publicUrl,
-                    is_current: true
-                }]);
+                if (publicUrl) {
+                    // Save to DB
+                    await supabase.from('model_images').update({ is_current: false }).eq('user_id', chatId);
+                    await supabase.from('model_images').insert([{
+                        user_id: chatId,
+                        storage_path: publicUrl,
+                        is_current: true
+                    }]);
 
-                await sessionService.updateSession(chatId, {
-                    modelImage: publicUrl,
-                    originalModelImage: publicUrl,
-                    modelGender: validation.gender,
-                    state: AppState.AWAITING_OUTFITS,
-                    photoBuffer: []
-                });
-                await api.sendMessage(chatId, t.model_saved);
+                    await sessionService.updateSession(chatId, {
+                        modelImage: publicUrl,
+                        originalModelImage: publicUrl,
+                        modelGender: validation.gender,
+                        state: AppState.AWAITING_OUTFITS,
+                        photoBuffer: []
+                    });
+                    await api.sendMessage(chatId, t.model_saved);
+                } else {
+                    await api.sendMessage(chatId, "Error saving image to cloud storage.");
+                }
             } else {
-                await api.sendMessage(chatId, "Error saving image to cloud storage.");
-            }
-        } else {
-            await analytics.trackModelValidation(chatId, false);
-            await sessionService.updateSession(chatId, { photoBuffer: [] });
-
-            if (validation.reason === "429_QUOTA_EXCEEDED") {
-                await api.sendMessage(chatId, t.quota_exceeded);
-            } else {
-                await api.sendMessage(chatId, t.invalid_model);
-            }
-        }
-    }
-    else if (session.state === AppState.AWAITING_OUTFITS || session.state === AppState.COMPLETED) {
-        const imagesToProcess = session.photoBuffer.slice(0, 4);
-        const statusMsg = await api.sendMessage(chatId, t.processing_items);
-        const batchResults = await categorizeOutfitItemsBatch(GEMINI_KEY, imagesToProcess, USE_MOCK_AI);
-
-        if (statusMsg?.result?.message_id) await api.deleteMessage(chatId, statusMsg.result.message_id);
-
-        if (batchResults.length > 0 && batchResults[0].description === "429_QUOTA_EXCEEDED") {
-            await sessionService.updateSession(chatId, { photoBuffer: [] });
-            await api.sendMessage(chatId, t.quota_exceeded);
-            return;
-        }
-
-        const prohibitedItem = batchResults.find(r => r.isProhibited);
-        if (prohibitedItem) {
-            await sessionService.updateSession(chatId, { photoBuffer: [] });
-            await api.sendMessage(chatId, t.prohibited_content_error);
-            return;
-        }
-
-        if (session.modelGender) {
-            const mismatchItem = batchResults.find(r => r.gender !== 'unisex' && r.gender !== session.modelGender);
-            if (mismatchItem) {
+                await analytics.trackModelValidation(chatId, false);
                 await sessionService.updateSession(chatId, { photoBuffer: [] });
-                const errorMsg = t.gender_error
-                    .replace('{model}', session.modelGender === 'male' ? 'Male' : 'Female')
-                    .replace('{item}', mismatchItem.gender === 'male' ? 'Male' : 'Female');
-                await api.sendMessage(chatId, errorMsg);
+
+                if (validation.reason === "429_QUOTA_EXCEEDED") {
+                    await api.sendMessage(chatId, t.quota_exceeded);
+                } else {
+                    await api.sendMessage(chatId, t.invalid_model);
+                }
+            }
+        }
+        else if (session.state === AppState.AWAITING_OUTFITS || session.state === AppState.COMPLETED) {
+            const imagesToProcess = session.photoBuffer.slice(0, 4);
+            const statusMsg = await api.sendMessage(chatId, t.processing_items);
+            const batchResults = await categorizeOutfitItemsBatch(GEMINI_KEY, imagesToProcess, USE_MOCK_AI);
+
+            if (statusMsg?.result?.message_id) await api.deleteMessage(chatId, statusMsg.result.message_id);
+
+            if (batchResults.length > 0 && batchResults[0].description === "429_QUOTA_EXCEEDED") {
+                await sessionService.updateSession(chatId, { photoBuffer: [] });
+                await api.sendMessage(chatId, t.quota_exceeded);
                 return;
             }
-        }
 
-        const newItems: OutfitItem[] = [];
-        for (let i = 0; i < batchResults.length; i++) {
-            const res = batchResults[i];
-            const path = `items/${chatId}/${Date.now()}_${i}.jpg`;
-            const publicUrl = await SupabaseStorageService.uploadImage('user-uploads', path, imagesToProcess[i], 'image/jpeg');
+            const prohibitedItem = batchResults.find(r => r.isProhibited);
+            if (prohibitedItem) {
+                await sessionService.updateSession(chatId, { photoBuffer: [] });
+                await api.sendMessage(chatId, t.prohibited_content_error);
+                return;
+            }
 
-            if (publicUrl) {
-                const { data: queueItem } = await supabase.from('outfit_queue').insert([{
-                    user_id: chatId,
-                    storage_path: publicUrl,
-                    category: res.category,
-                    description: res.description,
-                    mime_type: 'image/jpeg'
-                }]).select().single();
+            if (session.modelGender) {
+                const mismatchItem = batchResults.find(r => r.gender !== 'unisex' && r.gender !== session.modelGender);
+                if (mismatchItem) {
+                    await sessionService.updateSession(chatId, { photoBuffer: [] });
+                    const errorMsg = t.gender_error
+                        .replace('{model}', session.modelGender === 'male' ? 'Male' : 'Female')
+                        .replace('{item}', mismatchItem.gender === 'male' ? 'Male' : 'Female');
+                    await api.sendMessage(chatId, errorMsg);
+                    return;
+                }
+            }
 
-                newItems.push({
-                    id: queueItem?.id || Date.now().toString(),
-                    category: res.category,
-                    description: res.description,
-                    base64: publicUrl, // Using URL as base64 for now since Gemini service can handle it
-                    mimeType: 'image/jpeg',
-                    containsPerson: res.containsPerson
+            const newItems: OutfitItem[] = [];
+            for (let i = 0; i < batchResults.length; i++) {
+                const res = batchResults[i];
+                const path = `items/${chatId}/${Date.now()}_${i}.jpg`;
+                const publicUrl = await SupabaseStorageService.uploadImage('user-uploads', path, imagesToProcess[i], 'image/jpeg');
+
+                if (publicUrl) {
+                    const { data: queueItem } = await supabase.from('outfit_queue').insert([{
+                        user_id: chatId,
+                        storage_path: publicUrl,
+                        category: res.category,
+                        description: res.description,
+                        mime_type: 'image/jpeg'
+                    }]).select().single();
+
+                    newItems.push({
+                        id: queueItem?.id || Date.now().toString(),
+                        category: res.category,
+                        description: res.description,
+                        base64: publicUrl, // Using URL as base64 for now since Gemini service can handle it
+                        mimeType: 'image/jpeg',
+                        containsPerson: res.containsPerson
+                    });
+                }
+            }
+
+            const currentItems = [...session.outfitItems, ...newItems];
+            let nextState = session.state;
+            let nextModelImage = session.modelImage;
+
+            if (session.state === AppState.COMPLETED) {
+                nextState = AppState.AWAITING_OUTFITS;
+                if (session.originalModelImage) {
+                    nextModelImage = session.originalModelImage;
+                }
+            }
+
+            await sessionService.updateSession(chatId, {
+                outfitItems: currentItems,
+                photoBuffer: [],
+                state: nextState,
+                modelImage: nextModelImage
+            });
+
+            await analytics.trackFunnelStep('outfit');
+
+            const categoryNames = newItems.map(i => {
+                let name = getCategoryName(session.language!, i.category);
+                if (i.containsPerson) name += " (👤 Human)";
+                return name;
+            }).join(', ');
+
+            const buttons = [[
+                { text: t.ready_btn, callback_data: "generate_look" }
+            ]];
+
+            await api.sendMessage(
+                chatId,
+                `${t.item_received_prefix}: ${categoryNames}`,
+                { inlineKeyboard: buttons }
+            );
+        } else {
+            console.log(`[PROCESS] Ignoring photos for ${chatId} due to state: ${session.state}`);
+            // If state is AWAITING_LANGUAGE, maybe remind user?
+            if (session.state === AppState.AWAITING_LANGUAGE) {
+                const t = TRANSLATIONS[session.language || 'uz'];
+                await api.sendMessage(chatId, t.welcome_ask_lang, {
+                    inlineKeyboard: [[
+                        { text: "🇺🇿 O'zbekcha", callback_data: "lang_uz" },
+                        { text: "🇷🇺 Русский", callback_data: "lang_ru" }
+                    ]]
                 });
             }
+            await sessionService.updateSession(chatId, { photoBuffer: [] });
         }
-
-        const currentItems = [...session.outfitItems, ...newItems];
-        let nextState = session.state;
-        let nextModelImage = session.modelImage;
-
-        if (session.state === AppState.COMPLETED) {
-            nextState = AppState.AWAITING_OUTFITS;
-            if (session.originalModelImage) {
-                nextModelImage = session.originalModelImage;
+    } catch (err) {
+        console.error(`[PROCESS] Global error in processBufferedPhotos for ${chatId}:`, err);
+        // Try to notify the user if possible
+        try {
+            const session = await sessionService.getSession(chatId);
+            if (session && session.language) {
+                const t = TRANSLATIONS[session.language];
+                await api.sendMessage(chatId, t.gen_error);
             }
+            await sessionService.updateSession(chatId, { photoBuffer: [] });
+        } catch (innerErr) {
+            console.error("[PROCESS] Error recovery failed:", innerErr);
         }
-
-        await sessionService.updateSession(chatId, {
-            outfitItems: currentItems,
-            photoBuffer: [],
-            state: nextState,
-            modelImage: nextModelImage
-        });
-
-        await analytics.trackFunnelStep('outfit');
-
-        const categoryNames = newItems.map(i => {
-            let name = getCategoryName(session.language!, i.category);
-            if (i.containsPerson) name += " (👤 Human)";
-            return name;
-        }).join(', ');
-
-        const buttons = [[
-            { text: t.ready_btn, callback_data: "generate_look" }
-        ]];
-
-        await api.sendMessage(
-            chatId,
-            `${t.item_received_prefix}: ${categoryNames}`,
-            { inlineKeyboard: buttons }
-        );
-    } else {
-        await sessionService.updateSession(chatId, { photoBuffer: [] });
     }
 }
 
@@ -649,9 +675,15 @@ async function processUpdate(update: TelegramUpdate) {
         const currentBuffer = session.photoBuffer || [];
         currentBuffer.push(base64Image);
         if (session.bufferTimeout) clearTimeout(session.bufferTimeout);
-        const timeoutId = setTimeout(() => { processBufferedPhotos(chatId); }, 3000);
+        const timeoutId = setTimeout(async () => {
+            try {
+                await processBufferedPhotos(chatId);
+            } catch (err) {
+                console.error("Timeout handler error:", err);
+            }
+        }, 3000);
 
-        sessionService.updateSession(chatId, { photoBuffer: currentBuffer, bufferTimeout: timeoutId });
+        await sessionService.updateSession(chatId, { photoBuffer: currentBuffer, bufferTimeout: timeoutId });
         return;
     }
 

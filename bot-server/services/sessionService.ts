@@ -48,24 +48,7 @@ class SessionService {
     }
 
     public async updateSession(chatId: number, updates: Partial<UserSession>): Promise<void> {
-        const dbUpdates: any = {};
-
-        if (updates.state) dbUpdates.current_state = updates.state;
-        if (updates.language) dbUpdates.language = updates.language;
-        if (updates.credits !== undefined) dbUpdates.credits = updates.credits;
-        if (updates.modelGender) dbUpdates.model_gender = updates.modelGender;
-        if (updates.lastMonthlyGrant) dbUpdates.last_monthly_grant = updates.lastMonthlyGrant;
-
-        dbUpdates.last_active_at = new Date().toISOString();
-
-        if (Object.keys(dbUpdates).length > 0) {
-            await supabase
-                .from('users')
-                .update(dbUpdates)
-                .eq('id', chatId);
-        }
-
-        // Update ephemeral state
+        // Update ephemeral state IMMEDIATELY
         if (updates.photoBuffer !== undefined) {
             this.ephemeralSessions[chatId] = {
                 ...this.ephemeralSessions[chatId],
@@ -77,6 +60,23 @@ class SessionService {
                 ...this.ephemeralSessions[chatId],
                 bufferTimeout: updates.bufferTimeout
             };
+        }
+
+        const dbUpdates: any = {};
+        let shouldUpdateDb = false;
+
+        if (updates.state) { dbUpdates.current_state = updates.state; shouldUpdateDb = true; }
+        if (updates.language) { dbUpdates.language = updates.language; shouldUpdateDb = true; }
+        if (updates.credits !== undefined) { dbUpdates.credits = updates.credits; shouldUpdateDb = true; }
+        if (updates.modelGender) { dbUpdates.model_gender = updates.modelGender; shouldUpdateDb = true; }
+        if (updates.lastMonthlyGrant) { dbUpdates.last_monthly_grant = updates.lastMonthlyGrant; shouldUpdateDb = true; }
+
+        if (shouldUpdateDb) {
+            dbUpdates.last_active_at = new Date().toISOString();
+            await supabase
+                .from('users')
+                .update(dbUpdates)
+                .eq('id', chatId);
         }
     }
 
