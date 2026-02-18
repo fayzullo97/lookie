@@ -1,6 +1,6 @@
 {
     "name": "lookie-bot-server",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Standalone Telegram Bot Server for Lookie Try-On",
     "main": "dist/index.js",
     "scripts": {
