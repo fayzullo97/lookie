@@ -342,7 +342,8 @@ async function runGeneration(chatId: number, refinement?: string) {
             costCredits: 0,
             error: (error as any).message
         });
-        await api.sendMessage(chatId, t.gen_error);
+        const errSettings = (error as any);
+        await api.sendMessage(chatId, `⚠️ Generation Error (Debug): ${errSettings.message || JSON.stringify(error)}`);
     }
 }
 
