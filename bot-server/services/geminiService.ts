@@ -115,14 +115,17 @@ export const validateModelImage = async (apiKey: string, base64Image: string, mo
             return await retryOperation(async () => {
                 const result = await model.generateContent([
                     { inlineData: { mimeType: "image/jpeg", data: cleanedImage } },
-                    { text: "Is this a photo of a human? Respond valid:true if a person is clearly visible and it is suitable for a virtual try-on (ideally head to knees, but waist-up is also okay). Also detect the gender of the person (male or female)." },
+                    { text: "Look at this photo. Is there a person (human) visible in it? Rules: If ANY person is visible (full body, half body, face only, selfie, waist-up, etc.) respond valid:true. Only respond valid:false if there is NO person at all (e.g. only objects, animals, landscapes). Also detect gender as male or female. Be lenient - when in doubt, respond valid:true." },
                 ]);
 
                 const response = await result.response;
                 const text = response.text();
+                console.log(`[GEMINI] Validation raw response:`, text);
                 if (!text) throw new Error("No response");
                 const cleaned = cleanJsonString(text);
-                return JSON.parse(cleaned) as ValidationResult;
+                const parsed = JSON.parse(cleaned) as ValidationResult;
+                console.log(`[GEMINI] Validation result: valid=${parsed.valid}, gender=${parsed.gender}, reason=${parsed.reason || 'none'}`);
+                return parsed;
             });
         } catch (error: any) {
             console.error("Validation error:", error);
