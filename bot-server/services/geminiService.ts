@@ -337,6 +337,10 @@ CRITICAL IDENTITY RULE:
 The ONLY human identity that must appear in the final generated image is the USER MODEL IMAGE ([IMAGE 1]).
 [IMAGE 1] IS SACRED. DO NOT CHANGE THE FACE OR BODY SHAPE of [IMAGE 1].
 
+CRITICAL BACKGROUND RULE:
+ALWAYS preserve the original background of the USER MODEL IMAGE ([IMAGE 1]) EXACTLY AS IT IS.
+NEVER change, blur, or replace the background of [IMAGE 1] EVEN IF the outfit images ([IMAGE 2+]) have removed backgrounds or different backgrounds. The only exception is if the user provides an explicit 'background' category item, but otherwise, the background must remain identical to [IMAGE 1].
+
 HANDLING REFERENCE IMAGES ([IMAGE 2+]):
 - These images contain fashion items. A single image may contain a full outfit (top, bottom, shoes, accessories).
 - EXTRACT AND USE ALL VISIBLE ITEMS from [IMAGE 2+].
@@ -352,11 +356,11 @@ STRICT EXECUTION:
 1. Identify ALL clothing/accessories in [IMAGE 2+].
 2. "Cut out" these items mentally.
 3. Apply them onto the USER MODEL ([IMAGE 1]), replacing the original clothes.
-4. Preserve [IMAGE 1]'s face, head, hair, and body exactly as they are.
+4. Preserve [IMAGE 1]'s face, head, hair, body, AND BACKGROUND exactly as they are.
 5. If [IMAGE 2+] includes shoes, replace [IMAGE 1]'s shoes.
 
 If a conflict exists between model image and outfit image:
-→ ALWAYS prioritize the USER MODEL IMAGE ([IMAGE 1]) for identity/body.
+→ ALWAYS prioritize the USER MODEL IMAGE ([IMAGE 1]) for identity/body AND exact background environment.
 → ALWAYS prioritize [IMAGE 2+] for clothing/style.`;
 
       // USER PROMPT (GENERATION TASK)

@@ -42,7 +42,7 @@ const TRANSLATIONS = {
         welcome_ask_lang: "Assalomu alaykum! Botga xush kelibsiz. 🤖\nIltimos, muloqot tilini tanlang:",
         welcome_start: "Salom! Men sizning AI stilistingizman. 🍌✨\n\nSizga boshlash uchun 30 ta credit sovg'a qilindi! 🎁\nBoshlash uchun o'z rasmingizni yuboring (to'liq bo'y-bast bilan).",
         monthly_grant_msg: "Yangi oy muborak! 🌙 Sizga 30 ta bepul credit qo'shildi. 🎁",
-        low_credits: "⚠️ Hisobingizda creditlar yetarli emas. Image yaratish uchun kamida 10 ta credit kerak.\n\nHozirgi balans: ",
+        low_credits: "⚠️ Hisobingizda creditlar yetarli emas. Image yaratish uchun kamida 10 ta credit kerak.\n\nHozirgi balans: {balance} (Need 10)\n\n🎁 Quyidagi 5 ta qisqa savolga javob bering va 30 ta bepul credit oling!",
         buy_credits_btn: "💎 Credit sotib olish",
         balance_topup_msg: "Hisobingizni to'ldirish uchun paketni tanlang:",
         purchase_success: "To'lov qabul qilindi! 💎 {amount} credit hisobingizga qo'shildi.",
@@ -86,13 +86,33 @@ const TRANSLATIONS = {
         cat_hat: "Bosh kiyim",
         cat_accessory: "Aksessuar",
         cat_background: "Fon",
-        cat_unknown: "Noma'lum"
+        cat_unknown: "Noma'lum",
+        btn_free_credits: "🎁 Bepul credit olish",
+        sq1_text: "1. Botdan foydalanish jarayoni sizga qanchalik yoqdi?",
+        sq2_text: "2. Yaratilgan rasmlar qanchalik real va sifatli chiqdi?",
+        sq3_text: "3. Qaysi bosqich siz uchun eng noqulay yoki qiyin bo'ldi?",
+        sq3_opt1: "O'zimning rasmimni yuklash",
+        sq3_opt2: "Kiyim rasmlarini yuklash",
+        sq3_opt3: "Natijani kutish",
+        sq3_opt4: "Natija xohlaganimdek chiqmadi",
+        sq3_opt5: "Rasmlar sifatsiz yoki sun'iy chiqdi",
+        sq3_opt6: "Hammasi a'lo darajada",
+        sq3_opt7: "Boshqa",
+        sq3_other_prompt: "Iltimos, qaysi qismi noqulay bo'lganini yozib yuboring:",
+        sq4_text: "4. Agar bot mukammal ishlasa, u siz uchun qanchalik foydali bo'lar edi?",
+        sq5_text: "5. Cheksiz va yuqori sifatli rasmlar yaratish uchun to'lov qilgan bo'larmidingiz?",
+        sq5_opt1: "❌ Yo'q, faqat bepul versiyadan foydalanaman",
+        sq5_opt2: "💰 Ha, agar narx arzon bo'lsa",
+        sq5_opt3: "💎 Ha, agar sifati juda zo'r bo'lsa",
+        sq5_opt4: "🛍️ Ha, ayniqsa kiyim sotib olishdan oldin tanlashga yordam bersa",
+        sq_thanks: "Fikringiz uchun rahmat! 🎉 Hisobingizga 30 ta bepul credit qo'shildi.",
+        sq_error: "Kechirasiz, so'rovnomani saqlashda xatolik yuz berdi. Iltimos keyinroq qayta urinib ko'ring."
     },
     ru: {
         welcome_ask_lang: "Здравствуйте! Добро пожаловать. 🤖\nПожалуйста, выберите язык общения:",
         welcome_start: "Привет! Я ваш ИИ-стилист. 🍌✨\n\nВам начислено 30 приветственных кредитов! 🎁\nЧтобы начать, пожалуйста, отправьте мне ваше фото в полный рост.",
         monthly_grant_msg: "С новым месяцем! 🌙 Вам начислено 30 бесплатных кредитов. 🎁",
-        low_credits: "⚠️ Недостаточно кредитов. Для генерации нужно минимум 10 кредитов.\n\nТекущий баланс: ",
+        low_credits: "⚠️ Недостаточно кредитов. Для генерации нужно минимум 10 кредитов.\n\nТекущий баланс: {balance} (Need 10)\n\n🎁 Ответьте на 5 коротких вопросов и получите 30 бесплатных кредитов!",
         buy_credits_btn: "💎 Купить кредиты",
         balance_topup_msg: "Выберите пакет для пополнения счета:",
         purchase_success: "Платеж принят! 💎 {amount} кредитов зачислено на ваш счет.",
@@ -136,7 +156,27 @@ const TRANSLATIONS = {
         cat_hat: "Головной убор",
         cat_accessory: "Аксессуар",
         cat_background: "Фон",
-        cat_unknown: "Неизвестно"
+        cat_unknown: "Неизвестно",
+        btn_free_credits: "🎁 Получить бесплатные кредиты",
+        sq1_text: "1. Насколько вы удовлетворены общим опытом использования бота?",
+        sq2_text: "2. Насколько реалистичными и качественными были сгенерированные изображения?",
+        sq3_text: "3. Какая часть была самой разочаровывающей или сложной?",
+        sq3_opt1: "Загрузка фото модели",
+        sq3_opt2: "Загрузка фото одежды",
+        sq3_opt3: "Ожидание генерации",
+        sq3_opt4: "Результат не соответствует моему запросу",
+        sq3_opt5: "Проблемы с реалистичностью изображения",
+        sq3_opt6: "Ничего — все прошло гладко",
+        sq3_opt7: "Другое",
+        sq3_other_prompt: "Пожалуйста, напишите, что было самым разочаровыющим:",
+        sq4_text: "4. Если бы этот бот работал идеально, насколько он был бы ценен для вас?",
+        sq5_text: "5. Готовы ли вы платить за безлимитные или премиальные генерации?",
+        sq5_opt1: "❌ Нет, я буду использовать только бесплатную версию",
+        sq5_opt2: "💰 Да, если цена будет низкой",
+        sq5_opt3: "💎 Да, если качество будет очень высоким",
+        sq5_opt4: "🛍️ Да, особенно если это поможет выбрать одежду перед покупкой",
+        sq_thanks: "Спасибо за ваш отзыв! 🎉 30 бесплатных кредитов добавлены на ваш счет.",
+        sq_error: "Извините, при сохранении опроса произошла ошибка. Пожалуйста, попробуйте позже."
     }
 };
 
@@ -194,26 +234,22 @@ async function handleShowBalanceOptions(chatId: number) {
     const session = await sessionService.getSession(chatId);
     if (!session || !session.language) return;
 
-    // Disabled Payment Logic
-    // const t = TRANSLATIONS[session.language];
-    // const buttons = PAYMENT_PACKAGES.map(pkg => ([{
-    //     text: pkg.label,
-    //     callback_data: `buy_${pkg.id}`
-    // }]));
-    // await api.sendMessage(chatId, t.balance_topup_msg, { inlineKeyboard: buttons });
+    const t = TRANSLATIONS[session.language];
+    const buttons = [[{ text: t.btn_free_credits, callback_data: "start_survey" }]];
 
-    // New Survey Logic
-    const buttons = [[{ text: "Get free credits", callback_data: "start_survey" }]];
-    await api.sendMessage(chatId, "Answer 6 questions and get 30 free credits", { inlineKeyboard: buttons });
+    // Send the merged low credits + survey prompt
+    const msg = t.low_credits.replace('{balance}', session.credits.toString());
+    await api.sendMessage(chatId, msg, { inlineKeyboard: buttons });
 }
 
 // Survey Question Senders
-async function sendSurveyQuestion(chatId: number, state: AppState) {
+async function sendSurveyQuestion(chatId: number, messageId: number | null, state: AppState, language: string) {
+    const t = TRANSLATIONS[language as Language] || TRANSLATIONS['uz'];
     let questionText = "";
     let buttons: { text: string, callback_data: string }[][] = [];
 
     if (state === AppState.SURVEY_Q1) {
-        questionText = "1. How satisfied are you with the overall experience of the bot?";
+        questionText = t.sq1_text;
         buttons = [[
             { text: "1", callback_data: "sq1_1" },
             { text: "2", callback_data: "sq1_2" },
@@ -222,7 +258,7 @@ async function sendSurveyQuestion(chatId: number, state: AppState) {
             { text: "5", callback_data: "sq1_5" }
         ]];
     } else if (state === AppState.SURVEY_Q2) {
-        questionText = "2. How realistic and high-quality were the generated images?";
+        questionText = t.sq2_text;
         buttons = [[
             { text: "1", callback_data: "sq2_1" },
             { text: "2", callback_data: "sq2_2" },
@@ -231,18 +267,18 @@ async function sendSurveyQuestion(chatId: number, state: AppState) {
             { text: "5", callback_data: "sq2_5" }
         ]];
     } else if (state === AppState.SURVEY_Q3) {
-        questionText = "3. What was the most frustrating or difficult part?";
+        questionText = t.sq3_text;
         buttons = [
-            [{ text: "Uploading my model photo", callback_data: "sq3_uploading_my_model_photo" }],
-            [{ text: "Uploading outfit images", callback_data: "sq3_uploading_outfit_images" }],
-            [{ text: "Waiting for generation", callback_data: "sq3_waiting_for_generation" }],
-            [{ text: "Regeneration not matching my request", callback_data: "sq3_regeneration_not_matching_my_request" }],
-            [{ text: "Image realism issues", callback_data: "sq3_image_realism_issues" }],
-            [{ text: "Nothing — it was smooth", callback_data: "sq3_nothing" }],
-            [{ text: "Other", callback_data: "sq3_other" }]
+            [{ text: t.sq3_opt1, callback_data: "sq3_upload_model" }],
+            [{ text: t.sq3_opt2, callback_data: "sq3_upload_outfit" }],
+            [{ text: t.sq3_opt3, callback_data: "sq3_waiting" }],
+            [{ text: t.sq3_opt4, callback_data: "sq3_bad_result" }],
+            [{ text: t.sq3_opt5, callback_data: "sq3_fake_result" }],
+            [{ text: t.sq3_opt6, callback_data: "sq3_nothing" }],
+            [{ text: t.sq3_opt7, callback_data: "sq3_other" }]
         ];
     } else if (state === AppState.SURVEY_Q4) {
-        questionText = "4. If this bot worked perfectly, how valuable would it be for you?";
+        questionText = t.sq4_text;
         buttons = [[
             { text: "1", callback_data: "sq4_1" },
             { text: "2", callback_data: "sq4_2" },
@@ -251,16 +287,20 @@ async function sendSurveyQuestion(chatId: number, state: AppState) {
             { text: "5", callback_data: "sq4_5" }
         ]];
     } else if (state === AppState.SURVEY_Q5) {
-        questionText = "5. Would you pay for unlimited or premium image generations?";
+        questionText = t.sq5_text;
         buttons = [
-            [{ text: "❌ No, I would only use free version", callback_data: "sq5_no" }],
-            [{ text: "💰 Yes, if price is low", callback_data: "sq5_yes_low_price" }],
-            [{ text: "💎 Yes, if quality is very high", callback_data: "sq5_yes_high_quality" }],
-            [{ text: "🛍️ Yes, especially if it helps me choose clothes before buying", callback_data: "sq5_yes_shopping" }]
+            [{ text: t.sq5_opt1, callback_data: "sq5_no" }],
+            [{ text: t.sq5_opt2, callback_data: "sq5_yes_low_price" }],
+            [{ text: t.sq5_opt3, callback_data: "sq5_yes_high_quality" }],
+            [{ text: t.sq5_opt4, callback_data: "sq5_yes_shopping" }]
         ];
     }
 
-    await api.sendMessage(chatId, questionText, { inlineKeyboard: buttons });
+    if (messageId) {
+        await api.editMessageText(chatId, messageId, questionText, { inlineKeyboard: buttons });
+    } else {
+        await api.sendMessage(chatId, questionText, { inlineKeyboard: buttons });
+    }
 }
 
 async function handleSendInvoice(chatId: number, packageId: string) {
@@ -325,7 +365,6 @@ async function runGeneration(chatId: number, refinement?: string) {
 
     if (session.credits < GEN_COST) {
         await handleShowBalanceOptions(chatId);
-        await api.sendMessage(chatId, `${t.low_credits} ${session.credits} (Need ${GEN_COST})`);
         return;
     }
 
@@ -733,7 +772,7 @@ async function processUpdate(update: TelegramUpdate) {
             // Survey Handlers
             if (cb.data === 'start_survey') {
                 await sessionService.updateSession(chatId, { state: AppState.SURVEY_Q1, surveyAnswers: {} });
-                await sendSurveyQuestion(chatId, AppState.SURVEY_Q1);
+                await sendSurveyQuestion(chatId, cb.message?.message_id || null, AppState.SURVEY_Q1, session.language || 'uz');
                 return;
             }
 
@@ -742,7 +781,7 @@ async function processUpdate(update: TelegramUpdate) {
                 const answers = session.surveyAnswers || {};
                 answers.q1 = ans;
                 await sessionService.updateSession(chatId, { state: AppState.SURVEY_Q2, surveyAnswers: answers });
-                await sendSurveyQuestion(chatId, AppState.SURVEY_Q2);
+                await sendSurveyQuestion(chatId, cb.message?.message_id || null, AppState.SURVEY_Q2, session.language || 'uz');
                 return;
             }
             if (cb.data.startsWith('sq2_')) {
@@ -750,19 +789,20 @@ async function processUpdate(update: TelegramUpdate) {
                 const answers = session.surveyAnswers || {};
                 answers.q2 = ans;
                 await sessionService.updateSession(chatId, { state: AppState.SURVEY_Q3, surveyAnswers: answers });
-                await sendSurveyQuestion(chatId, AppState.SURVEY_Q3);
+                await sendSurveyQuestion(chatId, cb.message?.message_id || null, AppState.SURVEY_Q3, session.language || 'uz');
                 return;
             }
             if (cb.data.startsWith('sq3_')) {
                 const ansKey = cb.data.replace('sq3_', '');
                 let ansStr = ansKey;
-                if (ansKey === 'uploading_my_model_photo') ansStr = 'Uploading my model photo';
-                else if (ansKey === 'uploading_outfit_images') ansStr = 'Uploading outfit images';
-                else if (ansKey === 'waiting_for_generation') ansStr = 'Waiting for generation (1–2 minutes)';
-                else if (ansKey === 'regeneration_not_matching_my_request') ansStr = 'Regeneration not matching my request';
-                else if (ansKey === 'image_realism_issues') ansStr = 'Image realism issues';
-                else if (ansKey === 'nothing') ansStr = 'Nothing — it was smooth';
-                else if (ansKey === 'other') ansStr = 'Other';
+                const t = TRANSLATIONS[session.language || 'uz'] as any;
+                if (ansKey === 'upload_model') ansStr = t.sq3_opt1;
+                else if (ansKey === 'upload_outfit') ansStr = t.sq3_opt2;
+                else if (ansKey === 'waiting') ansStr = t.sq3_opt3;
+                else if (ansKey === 'bad_result') ansStr = t.sq3_opt4;
+                else if (ansKey === 'fake_result') ansStr = t.sq3_opt5;
+                else if (ansKey === 'nothing') ansStr = t.sq3_opt6;
+                else if (ansKey === 'other') ansStr = t.sq3_opt7;
 
                 const answers = session.surveyAnswers || {};
                 answers.q3 = ansStr;
@@ -771,11 +811,15 @@ async function processUpdate(update: TelegramUpdate) {
                     // We need text input. Leave state at Q3_OTHER (implicit) or just WAIT for text.
                     answers.q3_other_pending = true;
                     await sessionService.updateSession(chatId, { surveyAnswers: answers });
-                    await api.sendMessage(chatId, "Please type what the most frustrating part was:");
+
+                    if (cb.message?.message_id) {
+                        await api.deleteMessage(chatId, cb.message.message_id);
+                    }
+                    await api.sendMessage(chatId, t.sq3_other_prompt);
                     return;
                 } else {
                     await sessionService.updateSession(chatId, { state: AppState.SURVEY_Q4, surveyAnswers: answers });
-                    await sendSurveyQuestion(chatId, AppState.SURVEY_Q4);
+                    await sendSurveyQuestion(chatId, cb.message?.message_id || null, AppState.SURVEY_Q4, session.language || 'uz');
                     return;
                 }
             }
@@ -784,19 +828,24 @@ async function processUpdate(update: TelegramUpdate) {
                 const answers = session.surveyAnswers || {};
                 answers.q4 = ans;
                 await sessionService.updateSession(chatId, { state: AppState.SURVEY_Q5, surveyAnswers: answers });
-                await sendSurveyQuestion(chatId, AppState.SURVEY_Q5);
+                await sendSurveyQuestion(chatId, cb.message?.message_id || null, AppState.SURVEY_Q5, session.language || 'uz');
                 return;
             }
             if (cb.data.startsWith('sq5_')) {
                 const ansKey = cb.data.replace('sq5_', '');
+                const t = TRANSLATIONS[session.language || 'uz'] as any;
                 let ansStr = ansKey;
-                if (ansKey === 'no') ansStr = 'No, I would only use free version';
-                else if (ansKey === 'yes_low_price') ansStr = 'Yes, if price is low';
-                else if (ansKey === 'yes_high_quality') ansStr = 'Yes, if quality is very high';
-                else if (ansKey === 'yes_shopping') ansStr = 'Yes, especially if it helps me choose clothes before buying';
+                if (ansKey === 'no') ansStr = t.sq5_opt1;
+                else if (ansKey === 'yes_low_price') ansStr = t.sq5_opt2;
+                else if (ansKey === 'yes_high_quality') ansStr = t.sq5_opt3;
+                else if (ansKey === 'yes_shopping') ansStr = t.sq5_opt4;
 
                 const answers = session.surveyAnswers || {};
                 answers.q5 = ansStr;
+
+                if (cb.message?.message_id) {
+                    await api.deleteMessage(chatId, cb.message.message_id);
+                }
 
                 // End of Survey!
                 try {
@@ -819,12 +868,13 @@ async function processUpdate(update: TelegramUpdate) {
                         surveyAnswers: {}
                     });
 
-                    await api.sendMessage(chatId, "Thank you for your feedback! 🎉 30 free credits have been added to your account.", {
-                        keyboard: getMenuKeyboard(session.language, newCredits)
+                    await api.sendMessage(chatId, "🎉");
+                    await api.sendMessage(chatId, t.sq_thanks, {
+                        keyboard: getMenuKeyboard(session.language || 'uz', newCredits)
                     });
                 } catch (saveError) {
                     console.error("Failed to save survey:", saveError);
-                    await api.sendMessage(chatId, "Sorry, there was an error saving your survey. Please try again later.");
+                    await api.sendMessage(chatId, t.sq_error);
                 }
                 return;
             }
@@ -875,7 +925,7 @@ async function processUpdate(update: TelegramUpdate) {
         answers.q3_other = text;
         delete answers.q3_other_pending;
         await sessionService.updateSession(chatId, { state: AppState.SURVEY_Q4, surveyAnswers: answers });
-        await sendSurveyQuestion(chatId, AppState.SURVEY_Q4);
+        await sendSurveyQuestion(chatId, null, AppState.SURVEY_Q4, session.language || 'uz');
         return;
     }
 

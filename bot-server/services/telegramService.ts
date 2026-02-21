@@ -189,6 +189,34 @@ export class TelegramService {
         }
     }
 
+    async editMessageText(chatId: number, messageId: number, text: string, options?: SendMessageOptions) {
+        try {
+            const body: any = { chat_id: chatId, message_id: messageId, text: text };
+
+            if (options) {
+                if (options.inlineKeyboard) {
+                    body.reply_markup = JSON.stringify({ inline_keyboard: options.inlineKeyboard });
+                } else if (options.keyboard) {
+                    body.reply_markup = JSON.stringify({
+                        keyboard: options.keyboard,
+                        resize_keyboard: true,
+                        is_persistent: true
+                    });
+                }
+            }
+
+            const res = await fetch(`${API_BASE}${this.token}/editMessageText`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            return await res.json();
+        } catch (e) {
+            console.error("EditMessageText error", e);
+            return null;
+        }
+    }
+
     async answerCallbackQuery(callbackQueryId: string, text?: string) {
         try {
             await fetch(`${API_BASE}${this.token}/answerCallbackQuery`, {
