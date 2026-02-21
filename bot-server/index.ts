@@ -337,7 +337,20 @@ async function runGeneration(chatId: number, refinement?: string) {
     const processingMsg = await api.sendMessage(chatId, t.generating);
 
     try {
-        const processedItems = [...session.outfitItems];
+        let processedItems = [...session.outfitItems];
+
+        // Isolate clothing for items that contain a person
+        for (let i = 0; i < processedItems.length; i++) {
+            if (processedItems[i].containsPerson) {
+                try {
+                    console.log(`[GENERATE] Item ${i} contains a person. Isolating clothing...`);
+                    const isolatedBase64 = await isolateClothingItem(GEMINI_KEY, processedItems[i].base64, processedItems[i].description, USE_MOCK_AI);
+                    processedItems[i].base64 = isolatedBase64;
+                } catch (isoErr) {
+                    console.error(`[GENERATE] Failed to isolate clothing for item ${i}. Proceeding with original.`, isoErr);
+                }
+            }
+        }
 
         let prompt = "";
         if (USE_MOCK_AI) {
