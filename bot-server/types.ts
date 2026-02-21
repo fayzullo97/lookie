@@ -8,10 +8,17 @@ export enum AppState {
     AWAITING_OUTFITS = 'AWAITING_OUTFITS',
     GENERATING = 'GENERATING',
     COMPLETED = 'COMPLETED',
+    SURVEY_Q1 = 'SURVEY_Q1',
+    SURVEY_Q2 = 'SURVEY_Q2',
+    SURVEY_Q3 = 'SURVEY_Q3',
+    SURVEY_Q4 = 'SURVEY_Q4',
+    SURVEY_Q5 = 'SURVEY_Q5',
 }
 
 export enum ItemCategory {
     OUTFIT = 'outfit',
+    TOP = 'top',
+    BOTTOM = 'bottom',
     SHOES = 'shoes',
     HANDBAG = 'handbag',
     HAT = 'hat',
@@ -43,6 +50,7 @@ export interface CategorizationResult {
     isProhibited: boolean;
     gender: 'male' | 'female' | 'unisex';
     containsPerson: boolean;
+    imageIndex: number;
 }
 
 export interface UserSession {
@@ -57,6 +65,7 @@ export interface UserSession {
     lastActivity: number;
     credits: number;
     lastMonthlyGrant?: string;
+    surveyAnswers?: Record<string, any>;
     photoBuffer: string[];
     bufferTimeout: any;
 }
@@ -176,4 +185,17 @@ export interface AnalyticsMetrics {
 
     // Historical Data (Key = YYYY-MM-DD)
     history: Record<string, DailyMetrics>;
+}
+
+export interface SurveyResponse {
+    id: string;
+    user_id: number;
+    username?: string;
+    q1_satisfaction: number;
+    q2_realism: number;
+    q3_frustration: string;
+    q3_frustration_other?: string;
+    q4_value: number;
+    q5_payment: string;
+    created_at: string;
 }

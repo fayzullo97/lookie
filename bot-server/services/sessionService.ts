@@ -9,7 +9,8 @@ class SessionService {
         bufferTimeout: any,
         outfitItems: OutfitItem[],
         modelImage: string | null,
-        originalModelImage: string | null
+        originalModelImage: string | null,
+        surveyAnswers: Record<string, any>
     }> = {};
 
     private getEphemeral(chatId: number) {
@@ -19,7 +20,8 @@ class SessionService {
                 bufferTimeout: null,
                 outfitItems: [],
                 modelImage: null,
-                originalModelImage: null
+                originalModelImage: null,
+                surveyAnswers: {}
             };
         }
         return this.ephemeralSessions[chatId];
@@ -99,6 +101,9 @@ class SessionService {
         if (updates.originalModelImage !== undefined) {
             ephemeral.originalModelImage = updates.originalModelImage;
         }
+        if (updates.surveyAnswers !== undefined) {
+            ephemeral.surveyAnswers = updates.surveyAnswers;
+        }
 
         // Build DB updates
         const dbUpdates: any = {};
@@ -149,7 +154,8 @@ class SessionService {
                     lastActivity: Date.now(),
                     credits: INITIAL_CREDITS_VAL,
                     photoBuffer: ephemeral.photoBuffer,
-                    bufferTimeout: ephemeral.bufferTimeout
+                    bufferTimeout: ephemeral.bufferTimeout,
+                    surveyAnswers: ephemeral.surveyAnswers
                 };
             }
             return undefined;
@@ -217,7 +223,8 @@ class SessionService {
             credits: user.credits,
             lastMonthlyGrant: user.last_monthly_grant,
             photoBuffer: ephemeral.photoBuffer,
-            bufferTimeout: ephemeral.bufferTimeout
+            bufferTimeout: ephemeral.bufferTimeout,
+            surveyAnswers: ephemeral.surveyAnswers
         };
     }
 }

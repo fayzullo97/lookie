@@ -1,5 +1,5 @@
 
-import { AnalyticsMetrics, UserAnalyticsProfile, DateRangeFilter } from "../types";
+import { AnalyticsMetrics, UserAnalyticsProfile, DateRangeFilter, SurveyResponse } from "../types";
 import { supabase } from "./supabaseClient";
 
 class AnalyticsService {
@@ -138,6 +138,27 @@ class AnalyticsService {
 
     public trackError(_type: string) {
         // Errors could be logged to a 'system_errors' table
+    }
+
+    public async saveSurveyResponse(response: Omit<SurveyResponse, 'id' | 'created_at'>): Promise<void> {
+        const { error } = await supabase.from('survey_responses').insert([response]);
+        if (error) {
+            console.error('[DB] Error saving survey response:', error.message);
+            throw error;
+        }
+    }
+
+    public async getSurveyResponses(): Promise<SurveyResponse[]> {
+        const { data, error } = await supabase
+            .from('survey_responses')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('[DB] Error fetching survey responses:', error.message);
+            return [];
+        }
+        return data as SurveyResponse[];
     }
 }
 

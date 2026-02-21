@@ -51,12 +51,12 @@ export interface UserSession {
   language?: Language;
   modelImage: string | null;
   originalModelImage: string | null;
-  modelGender?: 'male' | 'female'; 
+  modelGender?: 'male' | 'female';
   outfitItems: OutfitItem[];
   lastActivity: number;
   credits: number;
   lastMonthlyGrant?: string;
-  photoBuffer: string[]; 
+  photoBuffer: string[];
   bufferTimeout: any;
 }
 
@@ -83,7 +83,7 @@ export interface TelegramUpdate {
     successful_payment?: {
       currency: string;
       total_amount: number;
-      invoice_payload: string; 
+      invoice_payload: string;
     };
   };
   callback_query?: {
@@ -147,7 +147,7 @@ export interface AnalyticsMetrics {
   totalUsers: number;
   activeUsersToday: number;
   newUsersToday: number;
-  
+
   // Funnel
   funnelStarted: number;
   funnelModelUploaded: number;
@@ -159,17 +159,17 @@ export interface AnalyticsMetrics {
   totalGenerations: number;
   successfulGenerations: number;
   failedGenerations: number;
-  
+
   // Validation Stats
   modelValidationAttempts: number;
   modelValidationSuccess: number;
-  
+
   // Costs
   totalCost: number;
-  
+
   // Errors
   errorCounts: Record<string, number>;
-  
+
   // Timestamps
   lastUpdated: number;
 
@@ -189,4 +189,17 @@ export interface Message {
   text?: string;
   image?: string;
   actions?: string[];
+}
+
+export interface SurveyResponse {
+  id: string;
+  user_id: number;
+  username?: string;
+  q1_satisfaction: number;
+  q2_realism: number;
+  q3_frustration: string;
+  q3_frustration_other?: string;
+  q4_value: number;
+  q5_payment: string;
+  created_at: string;
 }

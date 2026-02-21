@@ -147,13 +147,14 @@ export const categorizeOutfitItemsBatch = async (apiKey: string, base64Images: s
   if (mockMode) {
     console.log("[MOCK] Categorizing items...");
     await new Promise(r => setTimeout(r, 1000));
-    const mocks = [ItemCategory.OUTFIT, ItemCategory.SHOES, ItemCategory.HANDBAG, ItemCategory.HAT];
+    const mocks = [ItemCategory.TOP, ItemCategory.BOTTOM, ItemCategory.SHOES, ItemCategory.HANDBAG, ItemCategory.HAT];
     return base64Images.map((_, i) => ({
       category: mocks[i % mocks.length],
       description: `Mock Item ${i + 1} Description (Red/Blue)`,
       isProhibited: false,
       gender: 'female',
-      containsPerson: i % 2 === 0 // Mock every second item as having a person
+      containsPerson: i % 2 === 0, // Mock every second item as having a person
+      imageIndex: i
     }));
   }
 
@@ -167,26 +168,30 @@ export const categorizeOutfitItemsBatch = async (apiKey: string, base64Images: s
         items: {
           type: Type.OBJECT,
           properties: {
-            index: { type: Type.INTEGER },
+            imageIndex: { type: Type.INTEGER, description: "The 0-based index of the image these items belong to (from the provided list of images)." },
             category: { type: Type.STRING },
             description: { type: Type.STRING },
             isProhibited: { type: Type.BOOLEAN, description: "True if item is underwear, bikini, bra, lingerie, swimwear or adult toy" },
             gender: { type: Type.STRING, enum: ["male", "female", "unisex"], description: "The target gender for this item" },
             containsPerson: { type: Type.BOOLEAN, description: "True if the image contains a real human person, model, or visible body parts wearing the clothes. Mannequins are false." }
           },
-          required: ["index", "category", "description", "isProhibited", "gender", "containsPerson"]
+          required: ["imageIndex", "category", "description", "isProhibited", "gender", "containsPerson"]
         }
       };
 
       const prompt = `
-        Analyze these ${base64Images.length} fashion items. 
-        1. Identify the PRIMARY category (outfit, shoes, handbag, hat, accessory, background). If multiple items are present (e.g., shirt + pants), use 'outfit'.
-        2. Write a short description of ALL VISIBLE fashion items (e.g., "Red silk dress with black belt and white sneakers"). **IMPORTANT**: IGNORE any humans/models. Describe ONLY the clothing/accessories.
+        Analyze these ${base64Images.length} images containing fashion items.
+        CRITICAL TASK: For EACH distinct clothing item or accessory you see across all images, create ONE separate object in the array.
+        If a single image contains a person wearing a top, pants, and shoes, YOU MUST OUTPUT 3 SEPARATE OBJECTS for that same imageIndex.
+        
+        1. Identify the specific category: 'top', 'bottom', 'outfit' (only for full-body one-piece items like dresses), 'shoes', 'handbag', 'hat', 'accessory', 'background'.
+        2. Write a detailed description of EACH SPECIFIC ITEM. Do not describe the whole outfit in one object unless it's a dress. **IMPORTANT**: IGNORE humans/models. Describe ONLY the piece of clothing.
         3. SAFETY CHECK: Check if the item is PROHIBITED (Bikini, Underwear, etc.).
         4. GENDER CHECK: 'male', 'female', or 'unisex'.
-        5. HUMAN CHECK: containsPerson=true if real human is visible.
+        5. HUMAN CHECK: containsPerson=true if a real human wearing the item is visible.
+        6. imageIndex: Indicate which input image (0 to ${base64Images.length - 1}) this item was found in.
         
-        Return an ARRAY of objects.
+        Return an ARRAY of objects, with one object for EACH DISTINCT IDENTIFIABLE FASHION ITEM across all images.
       `;
 
       const parts: any[] = [];
@@ -216,23 +221,24 @@ export const categorizeOutfitItemsBatch = async (apiKey: string, base64Images: s
         return rawResults.map((res: any) => {
           let category = ItemCategory.UNKNOWN;
           const rc = res.category?.toLowerCase() || "";
-          if (Object.values(ItemCategory).includes(rc)) category = rc as ItemCategory;
+          if (Object.values(ItemCategory).includes(rc as ItemCategory)) category = rc as ItemCategory;
           return {
             category,
             description: res.description || "Item",
             isProhibited: res.isProhibited || false,
             gender: res.gender || 'unisex',
-            containsPerson: res.containsPerson || false
+            containsPerson: res.containsPerson || false,
+            imageIndex: res.imageIndex !== undefined ? res.imageIndex : 0
           };
         });
       });
     } catch (error: any) {
       console.error("Batch Categorization error:", error);
-      if (isQuotaError(error)) return base64Images.map(() => ({ category: ItemCategory.UNKNOWN, description: "429_QUOTA_EXCEEDED", isProhibited: false, gender: 'unisex', containsPerson: false }));
-      return base64Images.map(() => ({ category: ItemCategory.UNKNOWN, description: "Error analyzing", isProhibited: false, gender: 'unisex', containsPerson: false }));
+      if (isQuotaError(error)) return base64Images.map((_, i) => ({ category: ItemCategory.UNKNOWN, description: "429_QUOTA_EXCEEDED", isProhibited: false, gender: 'unisex', containsPerson: false, imageIndex: i }));
+      return base64Images.map((_, i) => ({ category: ItemCategory.UNKNOWN, description: "Error analyzing", isProhibited: false, gender: 'unisex', containsPerson: false, imageIndex: i }));
     }
   });
-};
+}
 
 export const isolateClothingItem = async (apiKey: string, base64Image: string, description: string, mockMode = false): Promise<string> => {
   if (mockMode) {

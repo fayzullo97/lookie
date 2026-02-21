@@ -193,14 +193,74 @@ async function checkMonthlyGrant(chatId: number) {
 async function handleShowBalanceOptions(chatId: number) {
     const session = await sessionService.getSession(chatId);
     if (!session || !session.language) return;
-    const t = TRANSLATIONS[session.language];
 
-    const buttons = PAYMENT_PACKAGES.map(pkg => ([{
-        text: pkg.label,
-        callback_data: `buy_${pkg.id}`
-    }]));
+    // Disabled Payment Logic
+    // const t = TRANSLATIONS[session.language];
+    // const buttons = PAYMENT_PACKAGES.map(pkg => ([{
+    //     text: pkg.label,
+    //     callback_data: `buy_${pkg.id}`
+    // }]));
+    // await api.sendMessage(chatId, t.balance_topup_msg, { inlineKeyboard: buttons });
 
-    await api.sendMessage(chatId, t.balance_topup_msg, { inlineKeyboard: buttons });
+    // New Survey Logic
+    const buttons = [[{ text: "Get free credits", callback_data: "start_survey" }]];
+    await api.sendMessage(chatId, "Answer 6 questions and get 30 free credits", { inlineKeyboard: buttons });
+}
+
+// Survey Question Senders
+async function sendSurveyQuestion(chatId: number, state: AppState) {
+    let questionText = "";
+    let buttons: { text: string, callback_data: string }[][] = [];
+
+    if (state === AppState.SURVEY_Q1) {
+        questionText = "1. How satisfied are you with the overall experience of the bot?";
+        buttons = [[
+            { text: "1", callback_data: "sq1_1" },
+            { text: "2", callback_data: "sq1_2" },
+            { text: "3", callback_data: "sq1_3" },
+            { text: "4", callback_data: "sq1_4" },
+            { text: "5", callback_data: "sq1_5" }
+        ]];
+    } else if (state === AppState.SURVEY_Q2) {
+        questionText = "2. How realistic and high-quality were the generated images?";
+        buttons = [[
+            { text: "1", callback_data: "sq2_1" },
+            { text: "2", callback_data: "sq2_2" },
+            { text: "3", callback_data: "sq2_3" },
+            { text: "4", callback_data: "sq2_4" },
+            { text: "5", callback_data: "sq2_5" }
+        ]];
+    } else if (state === AppState.SURVEY_Q3) {
+        questionText = "3. What was the most frustrating or difficult part?";
+        buttons = [
+            [{ text: "Uploading my model photo", callback_data: "sq3_uploading_my_model_photo" }],
+            [{ text: "Uploading outfit images", callback_data: "sq3_uploading_outfit_images" }],
+            [{ text: "Waiting for generation", callback_data: "sq3_waiting_for_generation" }],
+            [{ text: "Regeneration not matching my request", callback_data: "sq3_regeneration_not_matching_my_request" }],
+            [{ text: "Image realism issues", callback_data: "sq3_image_realism_issues" }],
+            [{ text: "Nothing — it was smooth", callback_data: "sq3_nothing" }],
+            [{ text: "Other", callback_data: "sq3_other" }]
+        ];
+    } else if (state === AppState.SURVEY_Q4) {
+        questionText = "4. If this bot worked perfectly, how valuable would it be for you?";
+        buttons = [[
+            { text: "1", callback_data: "sq4_1" },
+            { text: "2", callback_data: "sq4_2" },
+            { text: "3", callback_data: "sq4_3" },
+            { text: "4", callback_data: "sq4_4" },
+            { text: "5", callback_data: "sq4_5" }
+        ]];
+    } else if (state === AppState.SURVEY_Q5) {
+        questionText = "5. Would you pay for unlimited or premium image generations?";
+        buttons = [
+            [{ text: "❌ No, I would only use free version", callback_data: "sq5_no" }],
+            [{ text: "💰 Yes, if price is low", callback_data: "sq5_yes_low_price" }],
+            [{ text: "💎 Yes, if quality is very high", callback_data: "sq5_yes_high_quality" }],
+            [{ text: "🛍️ Yes, especially if it helps me choose clothes before buying", callback_data: "sq5_yes_shopping" }]
+        ];
+    }
+
+    await api.sendMessage(chatId, questionText, { inlineKeyboard: buttons });
 }
 
 async function handleSendInvoice(chatId: number, packageId: string) {
@@ -278,57 +338,6 @@ async function runGeneration(chatId: number, refinement?: string) {
 
     try {
         const processedItems = [...session.outfitItems];
-        let itemsUpdated = false;
-
-        for (let i = 0; i < processedItems.length; i++) {
-            const item = processedItems[i];
-            if ([ItemCategory.OUTFIT, ItemCategory.SHOES, ItemCategory.HAT, ItemCategory.ACCESSORY, ItemCategory.HANDBAG].includes(item.category)) {
-                // If the item contains a person, we MUST isolate the clothing (remove person + background)
-                // per user requirement: "1. remove image background 2. ignore model"
-                if (item.containsPerson) {
-                    try {
-                        console.log(`[GENERATE] Isolating clothing for item ${i} (contains person)...`);
-                        // Ensure base64 is loaded if it's a URL
-                        let rawBase64 = item.base64;
-                        if (rawBase64.startsWith('http')) {
-                            const res = await fetch(rawBase64);
-                            if (res.ok) {
-                                const buf = await res.arrayBuffer();
-                                rawBase64 = Buffer.from(buf).toString('base64');
-                            }
-                        }
-
-                        const isolatedBase64 = await isolateClothingItem(GEMINI_KEY, rawBase64, item.description, USE_MOCK_AI);
-                        processedItems[i] = {
-                            ...item,
-                            base64: isolatedBase64,
-                            mimeType: 'image/jpeg',
-                            containsPerson: false // It's isolated now
-                        };
-                        itemsUpdated = true;
-                    } catch (isoError) {
-                        console.error(`[GENERATE] Isolation failed for item ${i}. Using original.`, isoError);
-                    }
-                } else if (PIXLAB_KEY) {
-                    // Start of legacy PixLab support (Optional)
-                    try {
-                        const cleanBase64 = await removeBackgroundPixLab(PIXLAB_KEY, item.base64, USE_MOCK_AI);
-                        processedItems[i] = {
-                            ...item,
-                            base64: cleanBase64,
-                            mimeType: 'image/png'
-                        };
-                        itemsUpdated = true;
-                    } catch (pixError) {
-                        console.error(`PixLab failed for item ${i}. Using original.`, pixError);
-                    }
-                }
-            }
-        }
-
-        if (itemsUpdated) {
-            await sessionService.updateSession(chatId, { outfitItems: processedItems });
-        }
 
         let prompt = "";
         if (USE_MOCK_AI) {
@@ -514,8 +523,32 @@ async function processBufferedPhotos(chatId: number) {
             const newItems: OutfitItem[] = [];
             for (let i = 0; i < batchResults.length; i++) {
                 const res = batchResults[i];
+                const originalImageBase64 = imagesToProcess[res.imageIndex] || imagesToProcess[0];
+                let finalImageBase64 = originalImageBase64;
+                let containsPerson = res.containsPerson;
+
+                // Move isolation step here from generation to save time.
+                // If it contains a person, isolate it immediately before saving.
+                if (containsPerson) {
+                    try {
+                        console.log(`[PROCESS] Isolating item ${i} (${res.category})...`);
+                        finalImageBase64 = await isolateClothingItem(GEMINI_KEY, originalImageBase64, res.description, USE_MOCK_AI);
+                        containsPerson = false; // Isolated now
+                    } catch (isoErr) {
+                        console.error(`[PROCESS] Isolation failed for ${i}, using original.`, isoErr);
+                    }
+                } else if (PIXLAB_KEY && [ItemCategory.OUTFIT, ItemCategory.TOP, ItemCategory.BOTTOM, ItemCategory.SHOES, ItemCategory.HANDBAG, ItemCategory.HAT, ItemCategory.ACCESSORY].includes(res.category as ItemCategory)) {
+                    // Start of legacy PixLab support (Optional)
+                    try {
+                        console.log(`[PROCESS] Clearing background for item ${i} (${res.category})...`);
+                        finalImageBase64 = await removeBackgroundPixLab(PIXLAB_KEY, originalImageBase64, USE_MOCK_AI);
+                    } catch (pixError) {
+                        console.error(`[PROCESS] PixLab failed for item ${i}. Using original.`, pixError);
+                    }
+                }
+
                 const path = `items/${chatId}/${Date.now()}_${i}.jpg`;
-                const { url: publicUrl, error: uploadErr } = await SupabaseStorageService.uploadImage('user-uploads', path, imagesToProcess[i], 'image/jpeg');
+                const { url: publicUrl, error: uploadErr } = await SupabaseStorageService.uploadImage('user-uploads', path, finalImageBase64, containsPerson || !PIXLAB_KEY ? 'image/jpeg' : 'image/png');
 
                 if (publicUrl) {
                     const { data: queueItem, error: queueError } = await supabase.from('outfit_queue').insert([{
@@ -523,7 +556,7 @@ async function processBufferedPhotos(chatId: number) {
                         storage_path: publicUrl,
                         category: res.category,
                         description: res.description,
-                        mime_type: 'image/jpeg'
+                        mime_type: containsPerson || !PIXLAB_KEY ? 'image/jpeg' : 'image/png'
                     }]).select().single();
 
                     if (queueError) {
@@ -534,11 +567,11 @@ async function processBufferedPhotos(chatId: number) {
 
                     newItems.push({
                         id: queueItem?.id || Date.now().toString(),
-                        category: res.category,
+                        category: res.category as ItemCategory,
                         description: res.description,
                         base64: publicUrl,
-                        mimeType: 'image/jpeg',
-                        containsPerson: res.containsPerson
+                        mimeType: containsPerson || !PIXLAB_KEY ? 'image/jpeg' : 'image/png',
+                        containsPerson: containsPerson
                     });
                 } else {
                     console.error(`[PROCESS] Failed to upload outfit item ${i}: ${uploadErr}`);
@@ -683,6 +716,106 @@ async function processUpdate(update: TelegramUpdate) {
                     await api.sendMessage(chatId, t.need_item_alert);
                 }
             }
+
+            // Survey Handlers
+            if (cb.data === 'start_survey') {
+                await sessionService.updateSession(chatId, { state: AppState.SURVEY_Q1, surveyAnswers: {} });
+                await sendSurveyQuestion(chatId, AppState.SURVEY_Q1);
+                return;
+            }
+
+            if (cb.data.startsWith('sq1_')) {
+                const ans = parseInt(cb.data.split('_')[1], 10);
+                const answers = session.surveyAnswers || {};
+                answers.q1 = ans;
+                await sessionService.updateSession(chatId, { state: AppState.SURVEY_Q2, surveyAnswers: answers });
+                await sendSurveyQuestion(chatId, AppState.SURVEY_Q2);
+                return;
+            }
+            if (cb.data.startsWith('sq2_')) {
+                const ans = parseInt(cb.data.split('_')[1], 10);
+                const answers = session.surveyAnswers || {};
+                answers.q2 = ans;
+                await sessionService.updateSession(chatId, { state: AppState.SURVEY_Q3, surveyAnswers: answers });
+                await sendSurveyQuestion(chatId, AppState.SURVEY_Q3);
+                return;
+            }
+            if (cb.data.startsWith('sq3_')) {
+                const ansKey = cb.data.replace('sq3_', '');
+                let ansStr = ansKey;
+                if (ansKey === 'uploading_my_model_photo') ansStr = 'Uploading my model photo';
+                else if (ansKey === 'uploading_outfit_images') ansStr = 'Uploading outfit images';
+                else if (ansKey === 'waiting_for_generation') ansStr = 'Waiting for generation (1–2 minutes)';
+                else if (ansKey === 'regeneration_not_matching_my_request') ansStr = 'Regeneration not matching my request';
+                else if (ansKey === 'image_realism_issues') ansStr = 'Image realism issues';
+                else if (ansKey === 'nothing') ansStr = 'Nothing — it was smooth';
+                else if (ansKey === 'other') ansStr = 'Other';
+
+                const answers = session.surveyAnswers || {};
+                answers.q3 = ansStr;
+
+                if (ansKey === 'other') {
+                    // We need text input. Leave state at Q3_OTHER (implicit) or just WAIT for text.
+                    answers.q3_other_pending = true;
+                    await sessionService.updateSession(chatId, { surveyAnswers: answers });
+                    await api.sendMessage(chatId, "Please type what the most frustrating part was:");
+                    return;
+                } else {
+                    await sessionService.updateSession(chatId, { state: AppState.SURVEY_Q4, surveyAnswers: answers });
+                    await sendSurveyQuestion(chatId, AppState.SURVEY_Q4);
+                    return;
+                }
+            }
+            if (cb.data.startsWith('sq4_')) {
+                const ans = parseInt(cb.data.split('_')[1], 10);
+                const answers = session.surveyAnswers || {};
+                answers.q4 = ans;
+                await sessionService.updateSession(chatId, { state: AppState.SURVEY_Q5, surveyAnswers: answers });
+                await sendSurveyQuestion(chatId, AppState.SURVEY_Q5);
+                return;
+            }
+            if (cb.data.startsWith('sq5_')) {
+                const ansKey = cb.data.replace('sq5_', '');
+                let ansStr = ansKey;
+                if (ansKey === 'no') ansStr = 'No, I would only use free version';
+                else if (ansKey === 'yes_low_price') ansStr = 'Yes, if price is low';
+                else if (ansKey === 'yes_high_quality') ansStr = 'Yes, if quality is very high';
+                else if (ansKey === 'yes_shopping') ansStr = 'Yes, especially if it helps me choose clothes before buying';
+
+                const answers = session.surveyAnswers || {};
+                answers.q5 = ansStr;
+
+                // End of Survey!
+                try {
+                    await analytics.saveSurveyResponse({
+                        user_id: chatId,
+                        username: session.username || undefined,
+                        q1_satisfaction: answers.q1 || 0,
+                        q2_realism: answers.q2 || 0,
+                        q3_frustration: answers.q3 || '',
+                        q3_frustration_other: answers.q3_other || '',
+                        q4_value: answers.q4 || 0,
+                        q5_payment: answers.q5 || ''
+                    });
+
+                    // Add credits and reset to idle/model state
+                    const newCredits = session.credits + 30;
+                    await sessionService.updateSession(chatId, {
+                        state: AppState.AWAITING_OUTFITS, // Put them back so they can generate
+                        credits: newCredits,
+                        surveyAnswers: {}
+                    });
+
+                    await api.sendMessage(chatId, "Thank you for your feedback! 🎉 30 free credits have been added to your account.", {
+                        keyboard: getMenuKeyboard(session.language, newCredits)
+                    });
+                } catch (saveError) {
+                    console.error("Failed to save survey:", saveError);
+                    await api.sendMessage(chatId, "Sorry, there was an error saving your survey. Please try again later.");
+                }
+                return;
+            }
+
         }
         return;
     }
@@ -720,6 +853,16 @@ async function processUpdate(update: TelegramUpdate) {
             { text: "🇷🇺 Русский", callback_data: "lang_ru" }
         ]];
         await api.sendMessage(chatId, TRANSLATIONS['uz'].welcome_ask_lang, { inlineKeyboard: keyboard, removeKeyboard: true });
+        return;
+    }
+
+    // Handle Survey "Other" Text Input
+    if (session.state === AppState.SURVEY_Q3 && session.surveyAnswers?.q3_other_pending && text) {
+        const answers = session.surveyAnswers || {};
+        answers.q3_other = text;
+        delete answers.q3_other_pending;
+        await sessionService.updateSession(chatId, { state: AppState.SURVEY_Q4, surveyAnswers: answers });
+        await sendSurveyQuestion(chatId, AppState.SURVEY_Q4);
         return;
     }
 
@@ -850,6 +993,15 @@ app.post('/gift', async (req: express.Request, res: express.Response) => {
         res.json({ success: true, newCredits });
     } else {
         res.status(404).json({ error: "Session not found" });
+    }
+});
+
+app.get('/surveys', async (_req: express.Request, res: express.Response) => {
+    try {
+        const surveys = await analytics.getSurveyResponses();
+        res.json(surveys);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
     }
 });
 

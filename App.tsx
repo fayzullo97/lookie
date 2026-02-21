@@ -1,30 +1,34 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   AnalyticsMetrics,
   DateRangeFilter,
-  UserAnalyticsProfile
+  UserAnalyticsProfile,
+  SurveyResponse
 } from './types';
 import { analytics } from './services/analyticsService';
 import Dashboard from './components/Dashboard';
+import SurveyDashboard from './components/SurveyDashboard';
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'home' | 'settings'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'settings' | 'survey'>('home');
   const [dateFilter, setDateFilter] = useState<DateRangeFilter>('all');
   const [metrics, setMetrics] = useState<AnalyticsMetrics | null>(null);
   const [profiles, setProfiles] = useState<UserAnalyticsProfile[]>([]);
+  const [surveyResponses, setSurveyResponses] = useState<SurveyResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Poll for metrics and profiles
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [m, p] = await Promise.all([
+        const [m, p, s] = await Promise.all([
           analytics.getMetrics(dateFilter),
-          analytics.getUserProfiles()
+          analytics.getUserProfiles(),
+          analytics.getSurveyResponses()
         ]);
         setMetrics(m);
         setProfiles(p);
+        setSurveyResponses(s);
       } catch (e) {
         console.error("Fetch error", e);
       } finally {
@@ -72,8 +76,8 @@ const App: React.FC = () => {
           <button
             onClick={() => setActiveTab('home')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${activeTab === 'home'
-                ? 'bg-banana-400/10 text-banana-400 shadow-sm'
-                : 'hover:bg-slate-800/50 text-slate-400 hover:text-slate-200'
+              ? 'bg-banana-400/10 text-banana-400 shadow-sm'
+              : 'hover:bg-slate-800/50 text-slate-400 hover:text-slate-200'
               }`}
           >
             <span className="text-xl">📊</span>
@@ -83,12 +87,23 @@ const App: React.FC = () => {
           <button
             onClick={() => setActiveTab('settings')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${activeTab === 'settings'
-                ? 'bg-banana-400/10 text-banana-400 shadow-sm'
-                : 'hover:bg-slate-800/50 text-slate-400 hover:text-slate-200'
+              ? 'bg-banana-400/10 text-banana-400 shadow-sm'
+              : 'hover:bg-slate-800/50 text-slate-400 hover:text-slate-200'
               }`}
           >
             <span className="text-xl">⚙️</span>
             <span className="hidden lg:block font-medium">Settings</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('survey')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${activeTab === 'survey'
+              ? 'bg-banana-400/10 text-banana-400 shadow-sm'
+              : 'hover:bg-slate-800/50 text-slate-400 hover:text-slate-200'
+              }`}
+          >
+            <span className="text-xl">📝</span>
+            <span className="hidden lg:block font-medium">Survey</span>
           </button>
         </div>
 
@@ -115,6 +130,12 @@ const App: React.FC = () => {
               dateFilter={dateFilter}
               onFilterChange={setDateFilter}
               onGiftCredits={handleGiftCredits}
+            />
+          )}
+
+          {activeTab === 'survey' && (
+            <SurveyDashboard
+              responses={surveyResponses}
             />
           )}
 

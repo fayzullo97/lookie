@@ -38,6 +38,16 @@ class AnalyticsService {
     }
   }
 
+  public async getSurveyResponses(): Promise<any[]> {
+    try {
+      const res = await fetch(`${API_BASE}/surveys`);
+      return await res.json();
+    } catch (e) {
+      console.error("Failed to fetch surveys", e);
+      throw e;
+    }
+  }
+
   // --- No-op methods for compatibility with existing tracking calls in UI (if any) ---
   public trackUserActivity() { }
   public trackFunnelStep() { }
