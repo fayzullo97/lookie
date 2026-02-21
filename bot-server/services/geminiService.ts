@@ -387,6 +387,9 @@ WARNING:
 Do NOT produce an image that looks like the models in [IMAGE 2+].
 Do NOT change the user's face.
 
+CRITICAL BACKGROUND RULE:
+YOU MUST ENTIRELY PRESERVE THE INITIAL BACKGROUND OF [IMAGE 1]. DO NOT CREATE A NEW BACKGROUND. DO NOT BLUR THE EXISTING BACKGROUND. Any change to the background environment is a failure.
+
 STYLE:
 Professional fashion editorial. Realistic fit. High detail.
 

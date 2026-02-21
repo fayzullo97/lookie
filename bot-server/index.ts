@@ -461,9 +461,12 @@ async function runGeneration(chatId: number, refinement?: string) {
         const { error: clearErr } = await supabase.from('outfit_queue').delete().eq('user_id', chatId);
         if (clearErr) console.error(`[DB] Error clearing outfit queue after generation for ${chatId}:`, clearErr.message);
 
+        // Send photo with inline buttons
         const buttons = [[{ text: t.reset_btn, callback_data: "reset_session" }]];
         await api.sendPhoto(chatId, generatedBase64, t.gen_caption, buttons);
 
+        // Send an invisible/menu-updating system message to refresh the custom keyboard Balance digits
+        await api.sendMessage(chatId, t.restore_menu, { keyboard: getMenuKeyboard(session.language, newCredits) });
 
     } catch (error) {
         console.error("Generation error:", error);
