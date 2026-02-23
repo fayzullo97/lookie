@@ -40,7 +40,7 @@ const MONTHLY_GRANT = 30;
 const TRANSLATIONS = {
     uz: {
         welcome_ask_lang: "Assalomu alaykum! Botga xush kelibsiz. 🤖\nIltimos, muloqot tilini tanlang:",
-        welcome_start: "Salom! Men sizning AI stilistingizman. 🍌✨\n\nSizga boshlash uchun 30 ta credit sovg'a qilindi! 🎁\nBoshlash uchun o'z rasmingizni yuboring (to'liq bo'y-bast bilan).",
+        welcome_start: "Salom! Men sizning AI stilistingizman. ✨\n\nSizga boshlash uchun 30 ta credit sovg'a qilindi! 🎁\nBoshlash uchun o'z rasmingizni yuboring (to'liq bo'y-bast bilan).",
         monthly_grant_msg: "Yangi oy muborak! 🌙 Sizga 30 ta bepul credit qo'shildi. 🎁",
         low_credits: "⚠️ Hisobingizda creditlar yetarli emas. Image yaratish uchun kamida 10 ta credit kerak.\n\nHozirgi balans: {balance} (Need 10)\n\n🎁 Quyidagi 5 ta qisqa savolga javob bering va 30 ta bepul credit oling!",
         buy_credits_btn: "💎 Credit sotib olish",
@@ -58,7 +58,7 @@ const TRANSLATIONS = {
         waiting_outfits: "Look uchun rasmlarni kutyapman. 👕\nRasmni yuklang yoki agar tayyor bo'lsangiz '🚀 Boshlash' tugmasini bosing.",
         upload_photo_prompt: "📸 Davom etish uchun rasm yuklang.",
         generating: "🎨 Look yaratilmoqda... (Sabr qiling, 15-20 soniya)",
-        gen_caption: "Mana sizning yangi lookingiz! 🍌✨\n\n- O'zgartirish uchun yana look elementlarini yuboring.\n- Yoki 'Reset' tugmasini bosing.",
+        gen_caption: "Mana sizning yangi lookingiz! ✨\n\n- O'zgartirish uchun yana look elementlarini yuboring.\n- Yoki 'Reset' tugmasini bosing.",
         gen_error: "⚠️ Kechirasiz, xatolik yuz berdi. Qayta urinib ko'ring.",
         openai_missing: "⚠️ Tizim xatosi: OpenAI kaliti kiritilmagan.",
         safety_error: "⚠️ Uzr, AI bu obrazni yarata olmadi. Iltimos, ochiq-sochiq kiyimlar yoki nomaqbul rasmlardan qoching.",
@@ -110,7 +110,7 @@ const TRANSLATIONS = {
     },
     ru: {
         welcome_ask_lang: "Здравствуйте! Добро пожаловать. 🤖\nПожалуйста, выберите язык общения:",
-        welcome_start: "Привет! Я ваш ИИ-стилист. 🍌✨\n\nВам начислено 30 приветственных кредитов! 🎁\nЧтобы начать, пожалуйста, отправьте мне ваше фото в полный рост.",
+        welcome_start: "Привет! Я ваш ИИ-стилист. ✨\n\nВам начислено 30 приветственных кредитов! 🎁\nЧтобы начать, пожалуйста, отправьте мне ваше фото в полный рост.",
         monthly_grant_msg: "С новым месяцем! 🌙 Вам начислено 30 бесплатных кредитов. 🎁",
         low_credits: "⚠️ Недостаточно кредитов. Для генерации нужно минимум 10 кредитов.\n\nТекущий баланс: {balance} (Need 10)\n\n🎁 Ответьте на 5 коротких вопросов и получите 30 бесплатных кредитов!",
         buy_credits_btn: "💎 Купить кредиты",
@@ -128,7 +128,7 @@ const TRANSLATIONS = {
         waiting_outfits: "Жду фото для лука. 👕\nЗагрузите фото или нажмите '🚀 Начать', если закончили.",
         upload_photo_prompt: "📸 Пожалуйста, загрузите фото для продолжения.",
         generating: "🎨 Создаю ваш look... (Подождите 15-20 секунд)",
-        gen_caption: "Вот ваш новый look! 🍌✨\n\n- Отправьте еще элементы для изменения.\n- Или нажмите 'Reset'.",
+        gen_caption: "Вот ваш новый look! ✨\n\n- Отправьте еще элементы для изменения.\n- Или нажмите 'Reset'.",
         gen_error: "⚠️ Ошибка сервера. Пожалуйста, попробуйте снова.",
         openai_missing: "⚠️ Системная ошибка: Нет ключа OpenAI.",
         safety_error: "⚠️ Извините, ИИ не может создать этот образ. Пожалуйста, избегайте откровенных нарядов или неподобающих изображений.",
