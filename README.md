@@ -1,5 +1,4 @@
-
-# NanoBanana Bot Admin 🍌
+# NanoBanana Bot Admin ✨
 
 A client-side React application for managing the Virtual Try-On Telegram Bot. This dashboard allows you to view analytics, manage user sessions, and configure API tokens.
 

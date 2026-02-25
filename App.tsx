@@ -67,7 +67,7 @@ const App: React.FC = () => {
       <nav className="w-20 lg:w-64 border-r border-slate-800 flex flex-col items-center lg:items-stretch bg-slate-950/50 backdrop-blur-xl">
         <div className="p-6 flex items-center gap-3">
           <div className="w-10 h-10 bg-banana-400 rounded-xl flex items-center justify-center shadow-lg shadow-banana-500/20">
-            <span className="text-2xl">🍌</span>
+            <span className="text-2xl">✨</span>
           </div>
           <span className="hidden lg:block font-bold text-xl tracking-tight text-white">Lookie Admin</span>
         </div>
