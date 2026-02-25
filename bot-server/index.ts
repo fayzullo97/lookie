@@ -915,16 +915,11 @@ async function processUpdate(update: TelegramUpdate) {
     if (text === '/start' || text === '/reset') {
         await sessionService.updateSession(chatId, {
             state: AppState.AWAITING_LANGUAGE,
-            modelImage: null,
-            originalModelImage: null,
             outfitItems: []
         });
 
-        // Cleanup DB to ensure a fresh start
+        // Cleanup DB: only clear the outfit queue so the user starts a fresh look with their saved model
         try {
-            const { error: eStart1 } = await supabase.from('model_images').update({ is_current: false }).eq('user_id', chatId);
-            if (eStart1) console.error(`[FLOW] Error resetting model images during /start:`, eStart1.message);
-
             const { error: eStart2 } = await supabase.from('outfit_queue').delete().eq('user_id', chatId);
             if (eStart2) console.error(`[FLOW] Error clearing outfit queue during /start:`, eStart2.message);
         } catch (dbErr) {
