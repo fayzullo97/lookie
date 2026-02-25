@@ -882,6 +882,8 @@ async function processUpdate(update: TelegramUpdate) {
     if (text === '/start' || text === '/reset') {
         await sessionService.updateSession(chatId, {
             state: AppState.AWAITING_LANGUAGE,
+            modelImage: null,
+            originalModelImage: null,
             outfitItems: []
         });
 
