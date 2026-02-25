@@ -412,6 +412,14 @@ Do NOT change the user's face.
 CRITICAL BACKGROUND RULE:
 YOU MUST ENTIRELY PRESERVE THE INITIAL BACKGROUND OF [IMAGE 1]. DO NOT CREATE A NEW BACKGROUND. DO NOT BLUR THE EXISTING BACKGROUND. Any change to the background environment is a failure.
 
+CRITICAL OUTFIT IMAGE RULE:
+[IMAGE 2+] may contain residual artifacts from background removal. ONLY extract and use the CLOTHING ITEMS.
+DO NOT import ANY of the following from [IMAGE 2+] into the final image:
+- Backgrounds, walls, floors, furniture, or environmental elements
+- Body parts, skin, faces, or hair from other people
+- Unrelated objects (bags on the floor, accessories not described, decorative items)
+ONLY use the specific clothing items described in the text above.
+
 STYLE:
 Professional fashion editorial. Realistic fit. High detail.
 

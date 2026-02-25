@@ -21,6 +21,7 @@ import {
     isolateClothingItem
 } from './services/geminiService';
 import { removeBackgroundPixLab } from './services/pixlabService';
+import { removeImageBackground } from './services/backgroundRemovalService';
 import { generatePromptChatGPT } from './services/openaiService';
 import { supabase } from './services/supabaseClient';
 import { SupabaseStorageService } from './services/supabaseStorage';
@@ -378,7 +379,19 @@ async function runGeneration(chatId: number, refinement?: string) {
     try {
         let processedItems = [...session.outfitItems];
 
-        // Isolate clothing for items that contain a person
+        // Step 1: Remove backgrounds from ALL outfit images (free, local)
+        console.log(`[GENERATE] Removing backgrounds from ${processedItems.length} outfit item(s)...`);
+        for (let i = 0; i < processedItems.length; i++) {
+            try {
+                console.log(`[GENERATE] BG removal for item ${i} (${processedItems[i].category})...`);
+                processedItems[i].base64 = await removeImageBackground(processedItems[i].base64);
+                processedItems[i].mimeType = 'image/png';
+            } catch (bgErr) {
+                console.error(`[GENERATE] BG removal failed for item ${i}. Using original.`, bgErr);
+            }
+        }
+
+        // Step 2: Isolate clothing for items that contain a person (Gemini-based)
         for (let i = 0; i < processedItems.length; i++) {
             if (processedItems[i].containsPerson) {
                 try {
