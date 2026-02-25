@@ -1,5 +1,5 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
+import fetch from "node-fetch";
 import { ValidationResult, CategorizationResult, ItemCategory, OutfitItem } from "../types";
 
 // --- GLOBAL RATE LIMITER / QUEUE ---
@@ -53,6 +53,28 @@ const cleanBase64 = (str: string | undefined | null): string => {
   return str.replace(/[\r\n\s]+/g, "");
 };
 
+/**
+ * Ensures that the provided image data is a clean base64 string.
+ * If the input is a URL (starts with http), it downloads the image first.
+ */
+async function ensureBase64(imageData: string | undefined | null): Promise<string> {
+  if (!imageData) return "";
+
+  if (imageData.startsWith('http')) {
+    try {
+      const res = await fetch(imageData);
+      if (!res.ok) throw new Error(`Failed to fetch image from URL: ${imageData} (Status: ${res.status})`);
+      const buffer = await res.arrayBuffer();
+      return Buffer.from(buffer).toString('base64');
+    } catch (err: any) {
+      console.error(`[ensureBase64] Error fetching URL:`, err.message);
+      return "";
+    }
+  }
+
+  return cleanBase64(imageData);
+}
+
 const isQuotaError = (error: any): boolean => {
   if (!error) return false;
   if (error.status === 429) return true;
@@ -89,6 +111,7 @@ async function retryOperation<T>(operation: () => Promise<T>, retries = 1, delay
 // --- SERVICES ---
 
 export const validateModelImage = async (apiKey: string, base64Image: string, mockMode = false): Promise<ValidationResult> => {
+  const finalBase64 = await ensureBase64(base64Image);
   if (mockMode) {
     console.log("[MOCK] Validating image...");
     await new Promise(r => setTimeout(r, 500));
@@ -110,15 +133,14 @@ export const validateModelImage = async (apiKey: string, base64Image: string, mo
         required: ["valid"],
       };
 
-      const cleanedImage = cleanBase64(base64Image);
-      if (!cleanedImage) throw new Error("Image data is empty or invalid");
+      if (!finalBase64) throw new Error("Image data is empty or invalid");
 
       return await retryOperation(async () => {
         const response = await ai.models.generateContent({
           model: "gemini-3-flash-preview",
           contents: {
             parts: [
-              { inlineData: { mimeType: "image/jpeg", data: cleanedImage } },
+              { inlineData: { mimeType: "image/jpeg", data: finalBase64 } },
               { text: "Is this a photo of a human? Respond valid:true if user is visible from head to knees/ankles. Also detect the gender of the person (male or female)." },
             ],
           },
@@ -195,12 +217,12 @@ export const categorizeOutfitItemsBatch = async (apiKey: string, base64Images: s
       `;
 
       const parts: any[] = [];
-      base64Images.forEach(img => {
-        const cleaned = cleanBase64(img);
+      for (const img of base64Images) {
+        const cleaned = await ensureBase64(img);
         if (cleaned) {
           parts.push({ inlineData: { mimeType: "image/jpeg", data: cleaned } });
         }
-      });
+      }
       parts.push({ text: prompt });
 
       return await retryOperation(async () => {
@@ -252,7 +274,7 @@ export const isolateClothingItem = async (apiKey: string, base64Image: string, d
 
   return enqueueExclusively(async () => {
     try {
-      const cleanImage = cleanBase64(base64Image);
+      const cleanImage = await ensureBase64(base64Image);
       if (!cleanImage) throw new Error("Invalid image data");
 
       // Using gemini-2.5-flash-image instead of gemini-3-pro-image-preview
@@ -312,19 +334,19 @@ export const generateTryOnImage = async (
   return enqueueExclusively(async () => {
     try {
       const parts: any[] = [];
-      const cleanModel = cleanBase64(modelImageBase64);
+      const cleanModel = await ensureBase64(modelImageBase64);
       if (!cleanModel) throw new Error("Invalid model image data");
 
       // Image 1: The Model
       parts.push({ inlineData: { mimeType: "image/jpeg", data: cleanModel } });
 
       // Image 2..N: The Items
-      outfitItems.forEach(item => {
-        const cleanItem = cleanBase64(item.base64);
+      for (const item of outfitItems) {
+        const cleanItem = await ensureBase64(item.base64);
         if (cleanItem) {
           parts.push({ inlineData: { mimeType: "image/jpeg", data: cleanItem } });
         }
-      });
+      }
 
       // Prepare Consolidated Description
       const allDescriptions = outfitItems.map(i => i.description).join("; ");

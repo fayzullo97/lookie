@@ -399,43 +399,10 @@ async function runGeneration(chatId: number, refinement?: string) {
             prompt = await generatePromptChatGPT(OPENAI_KEY, processedItems, refinement);
         }
 
-        let base64Model = session.modelImage;
-        if (base64Model?.startsWith('http')) {
-            try {
-                const modelRes = await fetch(base64Model);
-                if (modelRes.ok) {
-                    const arrBuff = await modelRes.arrayBuffer();
-                    base64Model = Buffer.from(arrBuff).toString('base64');
-                } else {
-                    console.error(`[GENERATE] Failed to fetch model image from URL: ${base64Model}`);
-                }
-            } catch (fetchErr) {
-                console.error(`[GENERATE] Exception fetching model image:`, fetchErr);
-            }
-        }
-
-        // Convert outfit item URLs to base64 (items are stored as Supabase public URLs)
-        const base64Items = await Promise.all(processedItems.map(async (item, i) => {
-            if (item.base64?.startsWith('http')) {
-                try {
-                    const res = await fetch(item.base64);
-                    if (res.ok) {
-                        const buf = await res.arrayBuffer();
-                        return { ...item, base64: Buffer.from(buf).toString('base64'), mimeType: 'image/jpeg' };
-                    } else {
-                        console.error(`[GENERATE] Failed to fetch outfit item ${i} from URL: ${item.base64}`);
-                    }
-                } catch (fetchErr) {
-                    console.error(`[GENERATE] Exception fetching outfit item ${i}:`, fetchErr);
-                }
-            }
-            return item;
-        }));
-
-        const generatedBase64 = await generateTryOnImage(GEMINI_KEY, base64Model, base64Items, prompt, USE_MOCK_AI);
+        const generatedBase64 = await generateTryOnImage(GEMINI_KEY, session.modelImage!, processedItems, prompt, USE_MOCK_AI);
 
         if (!generatedBase64) throw new Error("Generated image is empty");
-        if (!USE_MOCK_AI && generatedBase64 === base64Model) {
+        if (!USE_MOCK_AI && generatedBase64 === session.modelImage) {
             console.error("[GENERATE] ⚠️ WARNING: Generated image is IDENTICAL to input model!");
         }
 
