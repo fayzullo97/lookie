@@ -272,47 +272,48 @@ export const isolateClothingItem = async (apiKey: string, base64Image: string, d
   if (!apiKey) throw new Error("MISSING_GEMINI_KEY");
   const ai = new GoogleGenAI({ apiKey });
 
-  return enqueueExclusively(async () => {
-    try {
-      const cleanImage = await ensureBase64(base64Image);
-      if (!cleanImage) throw new Error("Invalid image data");
+  // NOTE: Intentionally NOT using enqueueExclusively here.
+  // Isolation calls are run in parallel for speed optimization.
+  try {
+    const cleanImage = await ensureBase64(base64Image);
+    if (!cleanImage) throw new Error("Invalid image data");
 
-      // Using gemini-2.5-flash-image instead of gemini-3-pro-image-preview
-      // to avoid 403 PERMISSION_DENIED errors for users without Pro access.
-      const prompt = `Crop and extract the [${description}] from this image. 
-            Place it on a pure white background. 
-            Remove the human model, body parts, skin, and face completely. 
-            Keep the original shape, texture, and lighting of the clothing. 
-            Return ONLY the isolated clothing image.`;
+    const prompt = `STRICT ISOLATION RULES:
+1. Extract ONLY the clothing item described as [${description}].
+2. Place it on a PURE WHITE (#FFFFFF) background.
+3. COMPLETELY REMOVE all human elements: face, head, hair, skin, hands, feet, body silhouette. The output must contain ZERO human features — no face, no skin tone, no body shape.
+4. REMOVE all background elements: furniture, walls, floors, decorations, sofas, tables, plants, or any non-clothing object.
+5. Keep ONLY the fabric, texture, pattern, and shape of the clothing item itself.
+6. Do NOT include any person, mannequin outline, or body form.
+7. Return ONLY the isolated clothing image on white.`;
 
-      const parts = [
-        { inlineData: { mimeType: "image/jpeg", data: cleanImage } },
-        { text: prompt }
-      ];
+    const parts = [
+      { inlineData: { mimeType: "image/jpeg", data: cleanImage } },
+      { text: prompt }
+    ];
 
-      return await retryOperation(async () => {
-        const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash-image",
-          contents: { parts },
-          config: {
-            temperature: 0.1
-          }
-        });
-
-        const candidate = response.candidates?.[0];
-        if (candidate?.content?.parts) {
-          for (const part of candidate.content.parts) {
-            if (part.inlineData?.data) return part.inlineData.data;
-          }
+    return await retryOperation(async () => {
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-image",
+        contents: { parts },
+        config: {
+          temperature: 0.1
         }
-        throw new Error("No isolated image generated");
       });
 
-    } catch (error) {
-      console.error("Isolation error:", error);
-      throw error;
-    }
-  });
+      const candidate = response.candidates?.[0];
+      if (candidate?.content?.parts) {
+        for (const part of candidate.content.parts) {
+          if (part.inlineData?.data) return part.inlineData.data;
+        }
+      }
+      throw new Error("No isolated image generated");
+    });
+
+  } catch (error) {
+    console.error("Isolation error:", error);
+    throw error;
+  }
 };
 
 export const generateTryOnImage = async (
@@ -321,6 +322,7 @@ export const generateTryOnImage = async (
   outfitImageBase64: string,
   outfitDescriptions: string,
   prompt: string,
+  aspectRatio: { width: number; height: number },
   mockMode = false
 ): Promise<string> => {
   if (mockMode) {
@@ -354,15 +356,21 @@ export const generateTryOnImage = async (
         console.warn(`[GEMINI] ⚠️ WARNING: parts array has ${parts.length} items. Expected exactly 2 images before text.`);
       }
 
+      const ratioStr = (aspectRatio.width / aspectRatio.height).toFixed(2);
+
       const systemInstruction = `You are a professional virtual try-on image generation engine.
 
 CRITICAL IDENTITY RULE:
+[IMAGE 2] contains ONLY fabric/clothing items with NO human identity.
+NEVER extract, reference, or use any face, skin tone, or body shape from [IMAGE 2].
+If you detect any face or human features in [IMAGE 2], IGNORE THEM COMPLETELY.
 The ONLY human identity that must appear in the final generated image is the USER MODEL IMAGE ([IMAGE 1]).
 [IMAGE 1] IS SACRED. DO NOT CHANGE THE FACE OR BODY SHAPE of [IMAGE 1].
 
 CRITICAL ASPECT RATIO RULE:
-YOU MUST ENTIRELY PRESERVE THE INITIAL ASPECT RATIO AND ORIENTATION OF [IMAGE 1].
-The generated output must have the same width-to-height proportion as the original model photo.
+The original model photo has dimensions ${aspectRatio.width}x${aspectRatio.height} (ratio ${ratioStr}).
+YOU MUST generate output at EXACTLY this same aspect ratio.
+DO NOT crop, stretch, or reframe the image. Keep the model in the SAME position in the frame.
 
 CRITICAL BACKGROUND RULE:
 ALWAYS preserve the original background of the USER MODEL IMAGE ([IMAGE 1]) EXACTLY AS IT IS.
@@ -376,6 +384,8 @@ HIJAB/HEAD-COVERING APPLICATION:
 HANDLING OUTFIT REFERENCE IMAGE ([IMAGE 2]):
 - [IMAGE 2] is a 1:1 SQUARE COLLAGE of ISOLATED fashion items on a white background.
 - COMPLETELY IGNORE any residue, outlines, or white space in [IMAGE 2].
+- COMPLETELY IGNORE any non-clothing objects visible in [IMAGE 2] such as furniture, sofas, tables, plants, decorations, walls, or background elements.
+- ONLY extract wearable clothing and accessories (garments, shoes, bags, hats, scarves, jewelry).
 - EXTRACT AND APPLY ALL CLOTHING ITEMS shown in [IMAGE 2] onto the person in [IMAGE 1].
 - Do not swap faces or transfer skin tone from any small parts in [IMAGE 2].
 
@@ -395,7 +405,9 @@ The person in the final image MUST be the person from [IMAGE 1].
 Maintain [IMAGE 1]'s exact face, identity, gender, and posture.
 
 ASPECT RATIO:
-The final image MUST maintain the same aspect ratio as [IMAGE 1]. Do not crop or stretch.
+The original model image is ${aspectRatio.width}x${aspectRatio.height} pixels (ratio ${ratioStr}).
+The final image MUST be generated at EXACTLY this same aspect ratio. Do not crop, stretch, or reframe.
+Keep the model in the SAME position within the frame as [IMAGE 1].
 
 OUTFIT & MODESTY APPLICATION:
 1. Dress the subject in [IMAGE 1] using ALL items extracted from [IMAGE 2]:

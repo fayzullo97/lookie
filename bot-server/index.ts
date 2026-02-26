@@ -24,6 +24,7 @@ import {
 import { removeBackgroundPixLab } from './services/pixlabService';
 import { removeImageBackground } from './services/backgroundRemovalService';
 import { mergeImages } from './services/imageManipulationService';
+import sharp from 'sharp';
 import { generatePromptChatGPT } from './services/openaiService';
 import { supabase } from './services/supabaseClient';
 import { SupabaseStorageService } from './services/supabaseStorage';
@@ -550,13 +551,20 @@ async function continueGenerationAfterPreview(chatId: number, refinement?: strin
 
         const consolidatedDescriptions = processedItems.map(i => `[${i.category}]: ${i.description}`).join('\n');
 
-        // Step 3: Call generation with precisely two images (Model + Collage)
+        // Step 3: Get model image dimensions for aspect ratio preservation
+        const modelBase64 = await ensureBase64(session.modelImage!);
+        const modelMeta = await sharp(Buffer.from(modelBase64, 'base64')).metadata();
+        const aspectRatio = { width: modelMeta.width || 1024, height: modelMeta.height || 1024 };
+        console.log(`[GENERATE] Model image aspect ratio: ${aspectRatio.width}x${aspectRatio.height}`);
+
+        // Step 4: Call generation with precisely two images (Model + Collage)
         const generatedBase64 = await generateTryOnImage(
             GEMINI_KEY,
             session.modelImage!,
             finalMergedOutfit,
             consolidatedDescriptions,
             prompt,
+            aspectRatio,
             USE_MOCK_AI
         );
 

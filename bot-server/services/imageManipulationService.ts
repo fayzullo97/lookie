@@ -13,7 +13,7 @@ export const mergeImages = async (imagesBase64: string[]): Promise<string> => {
     if (imagesBase64.length === 1) return imagesBase64[0];
 
     try {
-        const CANVAS_SIZE = 1024;
+        const CANVAS_SIZE = 768;
         const PADDING = 20;
 
         // 1. Prepare buffers from base64
