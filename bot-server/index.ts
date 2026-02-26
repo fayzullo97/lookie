@@ -386,19 +386,29 @@ async function runGeneration(chatId: number, refinement?: string) {
     try {
         let processedItems = [...session.outfitItems];
 
-        // Step 1: Remove backgrounds from ALL outfit images (free, local)
-        console.log(`[GENERATE] Processing ${processedItems.length} outfit item(s) for preview...`);
-        for (let i = 0; i < processedItems.length; i++) {
-            try {
-                console.log(`[GENERATE] Preparing item ${i} (${processedItems[i].category})...`);
-                // Ensure we have base64 data (in case it's a URL)
-                processedItems[i].base64 = await ensureBase64(processedItems[i].base64);
+        // Step 1: Deduplicate by source URL — multiple categorized items may share the same image
+        const uniqueSourceUrls = [...new Set(processedItems.map(item => item.base64))];
+        console.log(`[GENERATE] ${processedItems.length} outfit item(s) from ${uniqueSourceUrls.length} unique source image(s)`);
 
-                console.log(`[GENERATE] BG removal for item ${i}...`);
-                processedItems[i].base64 = await removeImageBackground(processedItems[i].base64);
-                processedItems[i].mimeType = 'image/png';
+        // Step 2: Remove background from each unique source image ONCE
+        const bgRemovedMap = new Map<string, string>(); // originalUrl -> bgRemovedBase64
+        for (let i = 0; i < uniqueSourceUrls.length; i++) {
+            try {
+                console.log(`[GENERATE] Processing unique image ${i + 1}/${uniqueSourceUrls.length}...`);
+                const base64Data = await ensureBase64(uniqueSourceUrls[i]);
+                const bgRemoved = await removeImageBackground(base64Data);
+                bgRemovedMap.set(uniqueSourceUrls[i], bgRemoved);
             } catch (bgErr) {
-                console.error(`[GENERATE] BG removal failed for item ${i}.`, bgErr);
+                console.error(`[GENERATE] BG removal failed for unique image ${i}.`, bgErr);
+            }
+        }
+
+        // Step 3: Apply bg-removed images back to all items
+        for (let i = 0; i < processedItems.length; i++) {
+            const bgRemoved = bgRemovedMap.get(processedItems[i].base64);
+            if (bgRemoved) {
+                processedItems[i].base64 = bgRemoved;
+                processedItems[i].mimeType = 'image/png';
             }
         }
 
@@ -407,10 +417,11 @@ async function runGeneration(chatId: number, refinement?: string) {
             await api.deleteMessage(chatId, processingMsg.result.message_id);
         }
 
-        // TEMPORARY: Send bg-removed previews to user for confirmation
-        for (let i = 0; i < processedItems.length; i++) {
-            const caption = `${t.bg_preview_caption} (${i + 1}/${processedItems.length})`;
-            await api.sendPhoto(chatId, processedItems[i].base64, caption);
+        // TEMPORARY: Send ONE preview per unique source image (not per item)
+        const previewImages = [...bgRemovedMap.values()];
+        for (let i = 0; i < previewImages.length; i++) {
+            const caption = `${t.bg_preview_caption} (${i + 1}/${previewImages.length})`;
+            await api.sendPhoto(chatId, previewImages[i], caption);
         }
 
         // Save bg-removed items and wait for user confirmation
