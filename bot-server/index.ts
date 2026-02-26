@@ -18,7 +18,8 @@ import {
     validateModelImage,
     categorizeOutfitItemsBatch,
     generateTryOnImage,
-    isolateClothingItem
+    isolateClothingItem,
+    ensureBase64
 } from './services/geminiService';
 import { removeBackgroundPixLab } from './services/pixlabService';
 import { removeImageBackground } from './services/backgroundRemovalService';
@@ -386,14 +387,18 @@ async function runGeneration(chatId: number, refinement?: string) {
         let processedItems = [...session.outfitItems];
 
         // Step 1: Remove backgrounds from ALL outfit images (free, local)
-        console.log(`[GENERATE] Removing backgrounds from ${processedItems.length} outfit item(s)...`);
+        console.log(`[GENERATE] Processing ${processedItems.length} outfit item(s) for preview...`);
         for (let i = 0; i < processedItems.length; i++) {
             try {
-                console.log(`[GENERATE] BG removal for item ${i} (${processedItems[i].category})...`);
+                console.log(`[GENERATE] Preparing item ${i} (${processedItems[i].category})...`);
+                // Ensure we have base64 data (in case it's a URL)
+                processedItems[i].base64 = await ensureBase64(processedItems[i].base64);
+
+                console.log(`[GENERATE] BG removal for item ${i}...`);
                 processedItems[i].base64 = await removeImageBackground(processedItems[i].base64);
                 processedItems[i].mimeType = 'image/png';
             } catch (bgErr) {
-                console.error(`[GENERATE] BG removal failed for item ${i}. Using original.`, bgErr);
+                console.error(`[GENERATE] BG removal failed for item ${i}.`, bgErr);
             }
         }
 

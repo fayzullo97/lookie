@@ -57,7 +57,7 @@ const cleanBase64 = (str: string | undefined | null): string => {
  * Ensures that the provided image data is a clean base64 string.
  * If the input is a URL (starts with http), it downloads the image first.
  */
-async function ensureBase64(imageData: string | undefined | null): Promise<string> {
+export async function ensureBase64(imageData: string | undefined | null): Promise<string> {
   if (!imageData) return "";
 
   if (imageData.startsWith('http')) {
