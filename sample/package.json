@@ -1,0 +1,20 @@
+
+{
+  "name": "nanobanana-bot-admin",
+  "version": "1.0.0",
+  "description": "Admin Dashboard for the Virtual Try-On Bot",
+  "scripts": {
+    "start": "npx serve ."
+  },
+  "keywords": [
+    "react",
+    "telegram",
+    "gemini",
+    "admin"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "serve": "^14.2.1"
+  }
+}

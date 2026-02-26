@@ -353,18 +353,27 @@ CRITICAL IDENTITY RULE:
 The ONLY human identity that must appear in the final generated image is the USER MODEL IMAGE ([IMAGE 1]).
 [IMAGE 1] IS SACRED. DO NOT CHANGE THE FACE OR BODY SHAPE of [IMAGE 1].
 
+CRITICAL ASPECT RATIO RULE:
+YOU MUST ENTIRELY PRESERVE THE INITIAL ASPECT RATIO AND ORIENTATION OF [IMAGE 1].
+The generated output must have the same width-to-height proportion as the original model photo.
+
 CRITICAL BACKGROUND RULE:
 ALWAYS preserve the original background of the USER MODEL IMAGE ([IMAGE 1]) EXACTLY AS IT IS.
 NEVER change, blur, or replace the background of [IMAGE 1].
+
+HIJAB/HEAD-COVERING APPLICATION:
+- If [IMAGE 2] contains a hijab, scarf, or any head covering, YOU MUST apply it to the model in [IMAGE 1].
+- If the model in [IMAGE 1] has exposed hair and [IMAGE 2] includes a head covering, COVER THE HAIR AND HEAD accurately as shown in [IMAGE 2].
+- Ensure the face remains identical to [IMAGE 1] while the head-covering is placed around it.
 
 HANDLING OUTFIT REFERENCE IMAGE ([IMAGE 2]):
 - [IMAGE 2] is a 1:1 SQUARE COLLAGE of ISOLATED fashion items on a white background.
 - COMPLETELY IGNORE any residue, outlines, or white space in [IMAGE 2].
 - EXTRACT AND APPLY ALL CLOTHING ITEMS shown in [IMAGE 2] onto the person in [IMAGE 1].
-- Do not swap faces or transfer hair/skin tone from any small parts in [IMAGE 2].
+- Do not swap faces or transfer skin tone from any small parts in [IMAGE 2].
 
 IDENTITY PRESERVATION:
-- Maintain the exact facial features, hairstyle, skin tone, and body structure of the person in [IMAGE 1].
+- Maintain the exact facial features, skin tone, and body structure of the person in [IMAGE 1].
 - Only change the clothing and accessories by applying items from [IMAGE 2].
 - Always prioritize the USER MODEL IMAGE ([IMAGE 1]) for identity preservation.`;
 
@@ -378,19 +387,20 @@ PRIMARY SUBJECT:
 The person in the final image MUST be the person from [IMAGE 1].
 Maintain [IMAGE 1]'s exact face, identity, gender, and posture.
 
-OUTFIT APPLICATION:
-Dress the subject in [IMAGE 1] using ALL items extracted from [IMAGE 2]:
+ASPECT RATIO:
+The final image MUST maintain the same aspect ratio as [IMAGE 1]. Do not crop or stretch.
+
+OUTFIT & MODESTY APPLICATION:
+1. Dress the subject in [IMAGE 1] using ALL items extracted from [IMAGE 2]:
 ${outfitDescriptions}
+2. **HIJAB/HEAD-COVERING**: If a hijab or headscarf is visible in [IMAGE 2], apply it to cover the hair and head of the subject in [IMAGE 1], even if they were hair-exposed in the source.
 
 REFINEMENT INSTRUCTIONS:
 ${prompt || "Ensure a natural fit and photorealistic textures."}
 
 WARNING:
 Do NOT change the user's face. [IMAGE 1] is SACRED.
-Do NOT create a new background. The background of [IMAGE 1] must be RETAINED EXACTLY.
-
-FINAL OUTPUT:
-High-resolution, photorealistic fashion photography where [IMAGE 1] is wearing the outfit from [IMAGE 2].`;
+Do NOT create a new background. The background of [IMAGE 1] must be RETAINED EXACTLY.`;
 
       parts.push({ text: userInstruction });
 
