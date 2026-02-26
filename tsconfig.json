@@ -25,6 +25,7 @@
   ],
   "exclude": [
     "bot-server",
-    "virtual-try-on-bot"
+    "virtual-try-on-bot",
+    "sample"
   ]
 }
