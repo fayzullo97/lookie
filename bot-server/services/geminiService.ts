@@ -3,7 +3,7 @@ import fetch from "node-fetch";
 import { ValidationResult, CategorizationResult, ItemCategory, OutfitItem } from "../types";
 
 // --- GLOBAL RATE LIMITER / QUEUE ---
-const MIN_REQUEST_INTERVAL_MS = 5000;
+const MIN_REQUEST_INTERVAL_MS = 2000;
 let lastRequestTimestamp = 0;
 let queuePromise: Promise<any> = Promise.resolve();
 

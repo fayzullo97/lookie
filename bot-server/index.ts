@@ -402,21 +402,22 @@ async function runGeneration(chatId: number, refinement?: string) {
         const bgRemovedCache = new Map<string, string>(); // sourceUrl -> bgRemovedBase64
         const originalBase64Map = new Map<string, string>(); // sourceUrl -> originalBase64
 
-        for (const url of uniqueUrls) {
+        // Step 3: Background removal for unique source images (Parallelized)
+        await Promise.all(uniqueUrls.map(async (url) => {
             try {
                 const base64Data = await ensureBase64(url);
-                if (!base64Data) continue;
-                originalBase64Map.set(url, base64Data); // Store original for comparison
+                if (!base64Data) return;
+                originalBase64Map.set(url, base64Data);
 
                 const bgRemoved = await removeImageBackground(base64Data);
                 bgRemovedCache.set(url, bgRemoved || base64Data);
             } catch (e) {
                 console.error(`[GENERATE] BG removal failed for ${url}. Using original.`, e);
                 const originalBase64 = originalBase64Map.get(url) || await ensureBase64(url);
-                originalBase64Map.set(url, originalBase64); // Store original for comparison
+                originalBase64Map.set(url, originalBase64);
                 bgRemovedCache.set(url, originalBase64);
             }
-        }
+        }));
 
         // Step 4: Isolation (Extracting the specific item and removing the person)
         // Aggressive isolation: run it for all clothing/accessory categories to ensure snippets
@@ -427,21 +428,20 @@ async function runGeneration(chatId: number, refinement?: string) {
         ];
 
         const isolationSuccess = new Set<string>(); // item ID -> boolean
-        for (let i = 0; i < processedItems.length; i++) {
-            const item = processedItems[i];
+        // Step 4: Isolation (Parallelized - the service will still sequence them but without loop overhead)
+        await Promise.all(processedItems.map(async (item, i) => {
             const sourceBase64 = bgRemovedCache.get(item.base64);
-            if (!sourceBase64) continue;
+            if (!sourceBase64) return;
 
-            // Run isolation if it's a clothing category, even if containsPerson is lost
             if (categoriesToIsolate.includes(item.category)) {
                 try {
-                    console.log(`[GENERATE] Isolating item ${i + 1}/${processedItems.length} (${item.category})...`);
+                    console.log(`[GENERATE] Dispatching isolation for item ${i + 1}/${processedItems.length} (${item.category})...`);
                     const isolated = await isolateClothingItem(GEMINI_KEY, sourceBase64, item.description, USE_MOCK_AI);
                     item.base64 = isolated;
                     item.mimeType = 'image/png';
                     isolationSuccess.add(item.id);
-                } catch (isoErr) {
-                    console.error(`[GENERATE] Isolation failed for ${item.category}, using bg-removed full photo.`, isoErr);
+                } catch (e) {
+                    console.error(`[GENERATE] Isolation failed for ${item.category}, using bg-removed full photo.`, e);
                     item.base64 = sourceBase64;
                     item.mimeType = 'image/png';
                 }
@@ -449,7 +449,7 @@ async function runGeneration(chatId: number, refinement?: string) {
                 item.base64 = sourceBase64;
                 item.mimeType = 'image/png';
             }
-        }
+        }));
 
         // Delete the processing message
         if (processingMsg?.result?.message_id) {
