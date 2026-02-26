@@ -384,32 +384,31 @@ async function runGeneration(chatId: number, refinement?: string) {
     const processingMsg = await api.sendMessage(chatId, t.bg_preview_processing);
 
     try {
-        // Step 1: Deduplicate by category — keep only the FIRST item per category
-        const seenCategories = new Set<string>();
-        const dedupedItems = session.outfitItems.filter(item => {
-            if (seenCategories.has(item.category)) return false;
-            seenCategories.add(item.category);
-            return true;
-        });
-        console.log(`[GENERATE] Deduped: ${session.outfitItems.length} items -> ${dedupedItems.length} unique categories`);
+        // Step 1: Deep copy to avoid mutating the original session state if user cancels
+        let processedItems: OutfitItem[] = JSON.parse(JSON.stringify(session.outfitItems));
 
-        let processedItems = [...dedupedItems];
-
-        // Step 2: Remove background from each unique source image ONCE
+        // Step 2: Deduplicate by unique source image.
+        // We only want to remove background ONCE per unique uploaded image,
+        // and send exactly ONE preview per unique uploaded image.
         const uniqueSourceUrls = [...new Set(processedItems.map(item => item.base64))];
         const bgRemovedMap = new Map<string, string>();
+
+        console.log(`[GENERATE] Processing ${uniqueSourceUrls.length} unique source images for bg removal...`);
+
         for (let i = 0; i < uniqueSourceUrls.length; i++) {
             try {
-                console.log(`[GENERATE] BG removal for unique image ${i + 1}/${uniqueSourceUrls.length}...`);
                 const base64Data = await ensureBase64(uniqueSourceUrls[i]);
                 const bgRemoved = await removeImageBackground(base64Data);
-                bgRemovedMap.set(uniqueSourceUrls[i], bgRemoved);
+                // Keep track of successful bg removals mapping
+                if (bgRemoved && bgRemoved !== base64Data) {
+                    bgRemovedMap.set(uniqueSourceUrls[i], bgRemoved);
+                }
             } catch (bgErr) {
                 console.error(`[GENERATE] BG removal failed for image ${i}.`, bgErr);
             }
         }
 
-        // Step 3: Apply bg-removed images back to all deduped items
+        // Step 3: Apply the bg-removed images back to all items that shared that source
         for (let i = 0; i < processedItems.length; i++) {
             const bgRemoved = bgRemovedMap.get(processedItems[i].base64);
             if (bgRemoved) {
@@ -423,11 +422,17 @@ async function runGeneration(chatId: number, refinement?: string) {
             await api.deleteMessage(chatId, processingMsg.result.message_id);
         }
 
-        // TEMPORARY: Send one preview per deduped item
-        for (let i = 0; i < processedItems.length; i++) {
-            const catName = getCategoryName(session.language!, processedItems[i].category);
-            const caption = `${t.bg_preview_caption}\n${catName} (${i + 1}/${processedItems.length})`;
-            await api.sendPhoto(chatId, processedItems[i].base64, caption);
+        // TEMPORARY: Send ONE preview per successfully bg-removed unique image.
+        // This ensures if they upload 1 outfit picture, they get EXACTLY 1 preview, not 3.
+        const previewImages = [...bgRemovedMap.values()];
+        if (previewImages.length === 0) {
+            // If BG removal failed for everything, just fallback to originals for preview
+            previewImages.push(...uniqueSourceUrls.map(url => url));
+        }
+
+        for (let i = 0; i < previewImages.length; i++) {
+            const caption = `${t.bg_preview_caption} (${i + 1}/${previewImages.length})`;
+            await api.sendPhoto(chatId, previewImages[i], caption);
         }
 
         // Save deduped bg-removed items and wait for user confirmation

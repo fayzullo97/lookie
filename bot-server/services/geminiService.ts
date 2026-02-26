@@ -340,10 +340,12 @@ export const generateTryOnImage = async (
       // Image 1: The Model
       parts.push({ inlineData: { mimeType: "image/jpeg", data: cleanModel } });
 
-      // Image 2..N: The Items
+      // Image 2..N: The Items (Deduplicate so we don't send the same image 3 times for Top/Bottom/Shoes)
+      const uniqueItems = new Set<string>();
       for (const item of outfitItems) {
         const cleanItem = await ensureBase64(item.base64);
-        if (cleanItem) {
+        if (cleanItem && !uniqueItems.has(cleanItem)) {
+          uniqueItems.add(cleanItem);
           parts.push({ inlineData: { mimeType: "image/jpeg", data: cleanItem } });
         }
       }
