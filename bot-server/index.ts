@@ -888,7 +888,6 @@ async function processBufferedPhotos(chatId: number) {
 
             const categoryNames = newItems.map(i => {
                 let name = getCategoryName(session.language!, i.category);
-                if (i.containsPerson) name += " (👤 Human)";
                 return name;
             }).join(', ');
 
