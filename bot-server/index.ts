@@ -23,6 +23,7 @@ import {
 } from './services/geminiService';
 import { removeBackgroundPixLab } from './services/pixlabService';
 import { removeImageBackground } from './services/backgroundRemovalService';
+import { mergeImages } from './services/imageManipulationService';
 import { generatePromptChatGPT } from './services/openaiService';
 import { supabase } from './services/supabaseClient';
 import { SupabaseStorageService } from './services/supabaseStorage';
@@ -456,34 +457,35 @@ async function runGeneration(chatId: number, refinement?: string) {
         }
 
         // Step 5: Send Previews (Only effectively isolated/bg-removed snippets)
-        const sentBase64s = new Set<string>();
-        let sentCount = 0;
-        for (let i = 0; i < processedItems.length; i++) {
-            const item = processedItems[i];
+        // Step 5: Merge Isolated Elements into one Preview Image
+        const previewImages = processedItems
+            .filter(item => {
+                const originalUrl = dedupedByCat.find(d => d.id === item.id)?.base64;
+                const wasIsolated = isolationSuccess.has(item.id);
+                const originalData = originalUrl ? originalBase64Map.get(originalUrl) : null;
+                const bgRemovedData = originalUrl ? bgRemovedCache.get(originalUrl) : null;
+                const wasBgRemoved = !!(originalData && bgRemovedData && (originalData !== bgRemovedData));
+                return item.base64 && (wasIsolated || wasBgRemoved);
+            })
+            .map(item => item.base64);
 
-            // Logic to determine if this is "clean" enough to show:
-            // 1. It was successfuly isolated by Gemini (White background, no person)
-            // 2. OR it was successfully background-removed by imgly (White background, person might remain)
-            const wasIsolated = isolationSuccess.has(item.id);
+        let previewImageToLink: string | undefined;
+        let sentCount = previewImages.length;
 
-            // Check if THIS specific item index shared a source that was successfully BG removed
-            // Note: dedupedByCat[i].base64 is the original URL
-            const originalUrl = dedupedByCat[i].base64;
-            const originalData = originalBase64Map.get(originalUrl);
-            const bgRemovedData = bgRemovedCache.get(originalUrl);
-            const wasBgRemoved = originalData && bgRemovedData && (originalData !== bgRemovedData);
-
-            if (!item.base64 || sentBase64s.has(item.base64) || (!wasIsolated && !wasBgRemoved)) {
-                console.log(`[GENERATE] Skipping preview for ${item.category} (not isolated/clean enough)`);
-                continue;
+        if (previewImages.length > 0) {
+            try {
+                console.log(`[GENERATE] Merging ${previewImages.length} isolated items into one preview...`);
+                previewImageToLink = await mergeImages(previewImages);
+            } catch (mergeErr) {
+                console.error("[GENERATE] Failed to merge images, falling back to sending first isolated item.", mergeErr);
+                previewImageToLink = previewImages[0];
             }
+        }
 
-            sentBase64s.add(item.base64);
-            sentCount++;
-
-            const catName = getCategoryName(session.language!, item.category);
-            const caption = `${t.bg_preview_caption}\n🔹 ${catName}`;
-            await api.sendPhoto(chatId, item.base64, caption);
+        if (previewImageToLink) {
+            const catSummary = dedupedByCat.map(i => `🔹 ${getCategoryName(session.language!, i.category)}`).join('\n');
+            const caption = `${t.bg_preview_caption}\n${catSummary}`;
+            await api.sendPhoto(chatId, previewImageToLink, caption);
         }
 
         // If NO items were successfully isolated, we have to show SOMETHING or it's dead-end
