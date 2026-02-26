@@ -414,21 +414,27 @@ async function runGeneration(chatId: number, refinement?: string) {
         }
 
         // Step 4: Isolation (Extracting the specific item and removing the person)
-        // This is what the user expects for "isolated outfit elements".
+        // Aggressive isolation: run it for all clothing/accessory categories to ensure snippets
+        const categoriesToIsolate = [
+            ItemCategory.TOP, ItemCategory.BOTTOM, ItemCategory.SHOES,
+            ItemCategory.HANDBAG, ItemCategory.HAT, ItemCategory.ACCESSORY,
+            ItemCategory.OUTFIT
+        ];
+
         for (let i = 0; i < processedItems.length; i++) {
             const item = processedItems[i];
             const sourceBase64 = bgRemovedCache.get(item.base64);
             if (!sourceBase64) continue;
 
-            if (item.containsPerson) {
+            // Run isolation if it's a clothing category, even if containsPerson is lost
+            if (categoriesToIsolate.includes(item.category)) {
                 try {
                     console.log(`[GENERATE] Isolating item ${i + 1}/${processedItems.length} (${item.category})...`);
                     const isolated = await isolateClothingItem(GEMINI_KEY, sourceBase64, item.description, USE_MOCK_AI);
                     item.base64 = isolated;
                     item.mimeType = 'image/png';
-                    item.containsPerson = false; // Successfully isolated
                 } catch (isoErr) {
-                    console.error(`[GENERATE] Isolation failed for ${item.category}, using full photo.`, isoErr);
+                    console.error(`[GENERATE] Isolation failed for ${item.category}, using bg-removed full photo.`, isoErr);
                     item.base64 = sourceBase64;
                     item.mimeType = 'image/png';
                 }
