@@ -457,17 +457,10 @@ async function runGeneration(chatId: number, refinement?: string) {
             await api.deleteMessage(chatId, processingMsg.result.message_id);
         }
 
-        // Step 5: Send Previews (Only effectively isolated/bg-removed snippets)
+        // Step 5: Send Previews (ONLY successfully isolated items — never show original/bg-removed full photos)
         // Step 5: Merge Isolated Elements into one Preview Image
         const previewImages = processedItems
-            .filter(item => {
-                const originalUrl = dedupedByCat.find(d => d.id === item.id)?.base64;
-                const wasIsolated = isolationSuccess.has(item.id);
-                const originalData = originalUrl ? originalBase64Map.get(originalUrl) : null;
-                const bgRemovedData = originalUrl ? bgRemovedCache.get(originalUrl) : null;
-                const wasBgRemoved = !!(originalData && bgRemovedData && (originalData !== bgRemovedData));
-                return item.base64 && (wasIsolated || wasBgRemoved);
-            })
+            .filter(item => isolationSuccess.has(item.id))
             .map(item => item.base64);
 
         let previewImageToLink: string | undefined;
@@ -495,10 +488,12 @@ async function runGeneration(chatId: number, refinement?: string) {
             await api.sendMessage(chatId, "⚠️ Hech qanday kiyim qirqib olinmadi. Shunday bo'lsa ham davom ettiraverasizmi?");
         }
 
-        // Save processed isolated items and wait for user confirmation
+        // Save ONLY successfully isolated items for generation (exclude failed isolations to prevent
+        // original full-scene images from leaking into the generation collage)
+        const isolatedItems = processedItems.filter(item => isolationSuccess.has(item.id));
         await sessionService.updateSession(chatId, {
             state: AppState.AWAITING_BG_PREVIEW_CONFIRM,
-            bgPreviewItems: processedItems
+            bgPreviewItems: isolatedItems
         });
 
         // Send confirm/cancel buttons

@@ -278,14 +278,22 @@ export const isolateClothingItem = async (apiKey: string, base64Image: string, d
     const cleanImage = await ensureBase64(base64Image);
     if (!cleanImage) throw new Error("Invalid image data");
 
-    const prompt = `STRICT ISOLATION RULES:
-1. Extract ONLY the clothing item described as [${description}].
-2. Place it on a PURE WHITE (#FFFFFF) background.
-3. COMPLETELY REMOVE all human elements: face, head, hair, skin, hands, feet, body silhouette. The output must contain ZERO human features — no face, no skin tone, no body shape.
-4. REMOVE all background elements: furniture, walls, floors, decorations, sofas, tables, plants, or any non-clothing object.
-5. Keep ONLY the fabric, texture, pattern, and shape of the clothing item itself.
-6. Do NOT include any person, mannequin outline, or body form.
-7. Return ONLY the isolated clothing image on white.`;
+    const prompt = `You are a product photography assistant. Your task is to create a clean FLAT-LAY product photo.
+
+INPUT: An image that may contain a person wearing clothes, or just a clothing item.
+TARGET ITEM: [${description}]
+
+TASK: Generate a NEW flat-lay product image of ONLY the [${description}] on a PURE WHITE background.
+
+ABSOLUTE REQUIREMENTS:
+- Show the garment/item as if it is laid flat on a white surface or hanging on an invisible hanger.
+- There must be ZERO human presence: no face, no head, no hair, no skin, no hands, no feet, no body, no silhouette, no mannequin.
+- There must be ZERO background objects: no furniture, no walls, no floor, no sofa, no table, no plants, no decorations.
+- ONLY the single clothing item/accessory described above should appear.
+- Preserve the exact color, pattern, texture, and design details of the item from the input image.
+- The output must look like a clean e-commerce product photo.
+
+OUTPUT: A single product image on pure white (#FFFFFF) background with NOTHING else visible.`;
 
     const parts = [
       { inlineData: { mimeType: "image/jpeg", data: cleanImage } },
