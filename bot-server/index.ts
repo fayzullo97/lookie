@@ -384,36 +384,57 @@ async function runGeneration(chatId: number, refinement?: string) {
     const processingMsg = await api.sendMessage(chatId, t.bg_preview_processing);
 
     try {
-        // Step 1: Deep copy to avoid mutating the original session state if user cancels
-        let processedItems: OutfitItem[] = JSON.parse(JSON.stringify(session.outfitItems));
+        // Step 1: Filter to keep only the FIRST item of each category (User request: 2 tshirt -> 1 tshirt)
+        const seenCategories = new Set<string>();
+        const dedupedByCat = session.outfitItems.filter(item => {
+            if (seenCategories.has(item.category)) return false;
+            seenCategories.add(item.category);
+            return true;
+        });
+        console.log(`[GENERATE] Processing ${dedupedByCat.length} unique category items...`);
 
-        // Step 2: Deduplicate by unique source image.
-        // We only want to remove background ONCE per unique uploaded image,
-        // and send exactly ONE preview per unique uploaded image.
-        const uniqueSourceUrls = [...new Set(processedItems.map(item => item.base64))];
-        const bgRemovedMap = new Map<string, string>();
+        // Step 2: Deep copy to avoid mutating the original session state if user cancels
+        let processedItems: OutfitItem[] = JSON.parse(JSON.stringify(dedupedByCat));
 
-        console.log(`[GENERATE] Processing ${uniqueSourceUrls.length} unique source images for bg removal...`);
+        // Step 3: Background removal for unique source images
+        const uniqueUrls = [...new Set(processedItems.map(i => i.base64))];
+        const bgRemovedCache = new Map<string, string>(); // sourceUrl -> bgRemovedBase64
 
-        for (let i = 0; i < uniqueSourceUrls.length; i++) {
+        for (const url of uniqueUrls) {
             try {
-                const base64Data = await ensureBase64(uniqueSourceUrls[i]);
+                const base64Data = await ensureBase64(url);
+                if (!base64Data) continue;
                 const bgRemoved = await removeImageBackground(base64Data);
-                // Keep track of successful bg removals mapping
-                if (bgRemoved && bgRemoved !== base64Data) {
-                    bgRemovedMap.set(uniqueSourceUrls[i], bgRemoved);
-                }
-            } catch (bgErr) {
-                console.error(`[GENERATE] BG removal failed for image ${i}.`, bgErr);
+                bgRemovedCache.set(url, bgRemoved || base64Data);
+            } catch (e) {
+                console.error(`[GENERATE] BG removal failed for ${url}. Using original.`, e);
+                const originalBase64 = await ensureBase64(url);
+                bgRemovedCache.set(url, originalBase64);
             }
         }
 
-        // Step 3: Apply the bg-removed images back to all items that shared that source
+        // Step 4: Isolation (Extracting the specific item and removing the person)
+        // This is what the user expects for "isolated outfit elements".
         for (let i = 0; i < processedItems.length; i++) {
-            const bgRemoved = bgRemovedMap.get(processedItems[i].base64);
-            if (bgRemoved) {
-                processedItems[i].base64 = bgRemoved;
-                processedItems[i].mimeType = 'image/png';
+            const item = processedItems[i];
+            const sourceBase64 = bgRemovedCache.get(item.base64);
+            if (!sourceBase64) continue;
+
+            if (item.containsPerson) {
+                try {
+                    console.log(`[GENERATE] Isolating item ${i + 1}/${processedItems.length} (${item.category})...`);
+                    const isolated = await isolateClothingItem(GEMINI_KEY, sourceBase64, item.description, USE_MOCK_AI);
+                    item.base64 = isolated;
+                    item.mimeType = 'image/png';
+                    item.containsPerson = false; // Successfully isolated
+                } catch (isoErr) {
+                    console.error(`[GENERATE] Isolation failed for ${item.category}, using full photo.`, isoErr);
+                    item.base64 = sourceBase64;
+                    item.mimeType = 'image/png';
+                }
+            } else {
+                item.base64 = sourceBase64;
+                item.mimeType = 'image/png';
             }
         }
 
@@ -422,20 +443,23 @@ async function runGeneration(chatId: number, refinement?: string) {
             await api.deleteMessage(chatId, processingMsg.result.message_id);
         }
 
-        // TEMPORARY: Send ONE preview per successfully bg-removed unique image.
-        // This ensures if they upload 1 outfit picture, they get EXACTLY 1 preview, not 3.
-        const previewImages = [...bgRemovedMap.values()];
-        if (previewImages.length === 0) {
-            // If BG removal failed for everything, just fallback to originals for preview
-            previewImages.push(...uniqueSourceUrls.map(url => url));
+        // Step 5: Send Previews (Only UNIQUE base64 results to avoid duplicate images)
+        const sentBase64s = new Set<string>();
+        let sentCount = 0;
+        for (let i = 0; i < processedItems.length; i++) {
+            const item = processedItems[i];
+            if (!item.base64 || sentBase64s.has(item.base64)) continue;
+            sentBase64s.add(item.base64);
+            sentCount++;
+
+            const catName = getCategoryName(session.language!, item.category);
+            const caption = `${t.bg_preview_caption}\n🔹 ${catName}`;
+            await api.sendPhoto(chatId, item.base64, caption);
         }
 
-        for (let i = 0; i < previewImages.length; i++) {
-            const caption = `${t.bg_preview_caption} (${i + 1}/${previewImages.length})`;
-            await api.sendPhoto(chatId, previewImages[i], caption);
-        }
+        if (sentCount === 0) throw new Error("No items could be processed for preview.");
 
-        // Save deduped bg-removed items and wait for user confirmation
+        // Save processed isolated items and wait for user confirmation
         await sessionService.updateSession(chatId, {
             state: AppState.AWAITING_BG_PREVIEW_CONFIRM,
             bgPreviewItems: processedItems

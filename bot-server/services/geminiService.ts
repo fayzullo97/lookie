@@ -346,7 +346,7 @@ export const generateTryOnImage = async (
         const cleanItem = await ensureBase64(item.base64);
         if (cleanItem && !uniqueItems.has(cleanItem)) {
           uniqueItems.add(cleanItem);
-          parts.push({ inlineData: { mimeType: "image/jpeg", data: cleanItem } });
+          parts.push({ inlineData: { mimeType: item.mimeType || "image/jpeg", data: cleanItem } });
         }
       }
 
