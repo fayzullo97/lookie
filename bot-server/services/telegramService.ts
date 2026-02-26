@@ -9,6 +9,7 @@ export interface SendMessageOptions {
     inlineKeyboard?: any[];
     keyboard?: any[][];
     removeKeyboard?: boolean;
+    parseMode?: 'HTML' | 'Markdown';
 }
 
 export interface InvoiceOptions {
@@ -83,6 +84,10 @@ export class TelegramService {
     async sendMessage(chatId: number, text: string, options?: SendMessageOptions) {
         try {
             const body: any = { chat_id: chatId, text: text };
+
+            if (options?.parseMode) {
+                body.parse_mode = options.parseMode;
+            }
 
             if (options) {
                 if (options.inlineKeyboard) {

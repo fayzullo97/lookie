@@ -40,6 +40,8 @@ const USE_MOCK_AI = false; // Force real AI for now to debug 'original image' is
 
 const GEN_COST = 10;
 const MONTHLY_GRANT = 30;
+const PROMO_CREDIT = 20;
+let botUsername = ''; // Fetched at startup via getMe()
 
 const TRANSLATIONS = {
     uz: {
@@ -114,7 +116,15 @@ const TRANSLATIONS = {
         sq5_opt3: "💎 Ha, agar sifati juda zo'r bo'lsa",
         sq5_opt4: "🛍️ Ha, ayniqsa kiyim sotib olishdan oldin tanlashga yordam bersa",
         sq_thanks: "Fikringiz uchun rahmat! 🎉 Hisobingizga 30 ta bepul credit qo'shildi.",
-        sq_error: "Kechirasiz, so'rovnomani saqlashda xatolik yuz berdi. Iltimos keyinroq qayta urinib ko'ring."
+        sq_error: "Kechirasiz, so'rovnomani saqlashda xatolik yuz berdi. Iltimos keyinroq qayta urinib ko'ring.",
+        menu_promo: "🎟 Promo kod",
+        promo_msg: "🎉 Tabriklaymiz! Sizning shaxsiy promo kodingiz:\n\n🎟 <code>{code}</code>\n\nBu kodni do'stlaringiz bilan ulashing! Ular bot orqali ro'yxatdan o'tganda, siz ham, do'stingiz ham 20 ta bepul credit olasiz!\n\n👉 Bot havolasi: https://t.me/{bot}?start={code}",
+        promo_redeemed: "🎉 Promo kod qabul qilindi! Sizga va do'stingizga 20 ta credit berildi!",
+        promo_owner_notify: "🎉 Kimdir sizning promo kodingizdan foydalandi! 20 ta credit qo'shildi!",
+        promo_already_used: "⚠️ Siz allaqachon promo koddan foydalangansiz. Har bir foydalanuvchi faqat bitta promo kodni ishlatishi mumkin.",
+        promo_own_code: "⚠️ O'z promo kodingizni ishlata olmaysiz.",
+        promo_invalid: "⚠️ Noto'g'ri promo kod.",
+        promo_share_suggestion: "💡 Do'stlaringizga promo kodingizni ulashing va har biri uchun 20 ta bepul credit oling!\n\n'🎟 Promo kod' tugmasini bosing."
     },
     ru: {
         welcome_ask_lang: "Здравствуйте! Добро пожаловать. 🤖\nПожалуйста, выберите язык общения:",
@@ -188,7 +198,15 @@ const TRANSLATIONS = {
         sq5_opt3: "💎 Да, если качество будет очень высоким",
         sq5_opt4: "🛍️ Да, особенно если это поможет выбрать одежду перед покупкой",
         sq_thanks: "Спасибо за ваш отзыв! 🎉 30 бесплатных кредитов добавлены на ваш счет.",
-        sq_error: "Извините, при сохранении опроса произошла ошибка. Пожалуйста, попробуйте позже."
+        sq_error: "Извините, при сохранении опроса произошла ошибка. Пожалуйста, попробуйте позже.",
+        menu_promo: "🎟 Промо код",
+        promo_msg: "🎉 Поздравляем! Ваш персональный промо-код:\n\n🎟 <code>{code}</code>\n\nПоделитесь этим кодом с друзьями! Когда они зарегистрируются через бот, и вы, и ваш друг получите 20 бесплатных кредитов!\n\n👉 Ссылка на бот: https://t.me/{bot}?start={code}",
+        promo_redeemed: "🎉 Промо-код принят! Вам и вашему другу начислено по 20 кредитов!",
+        promo_owner_notify: "🎉 Кто-то использовал ваш промо-код! 20 кредитов начислено!",
+        promo_already_used: "⚠️ Вы уже использовали промо-код. Каждый пользователь может использовать только один промо-код.",
+        promo_own_code: "⚠️ Вы не можете использовать свой собственный промо-код.",
+        promo_invalid: "⚠️ Неверный промо-код.",
+        promo_share_suggestion: "💡 Поделитесь промо-кодом с друзьями и получите 20 бесплатных кредитов за каждого!\n\nНажмите кнопку '🎟 Промо код'."
     }
 };
 
@@ -203,8 +221,8 @@ const getMenuKeyboard = (lang: Language, credits: number) => {
     const t = TRANSLATIONS[lang];
     return [
         [{ text: `${t.menu_balance}: ${credits}` }],
-        [{ text: t.menu_reset }, { text: t.menu_model }],
-        [{ text: t.menu_lang }]
+        [{ text: t.menu_promo }, { text: t.menu_lang }],
+        [{ text: t.menu_reset }, { text: t.menu_model }]
     ];
 };
 
@@ -242,16 +260,175 @@ async function checkMonthlyGrant(chatId: number) {
     }
 }
 
+// --- PROMO CODE HELPERS ---
+
+function generatePromoCode(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I/O/0/1 to avoid confusion
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+}
+
+async function ensurePromoCode(chatId: number): Promise<string> {
+    // Check if user already has a promo code
+    const { data: existing } = await supabase
+        .from('promo_codes')
+        .select('code')
+        .eq('user_id', chatId)
+        .single();
+
+    if (existing?.code) return existing.code;
+
+    // Generate a unique code (retry if collision)
+    for (let attempt = 0; attempt < 5; attempt++) {
+        const code = generatePromoCode();
+        const { error } = await supabase
+            .from('promo_codes')
+            .insert([{ user_id: chatId, code }]);
+
+        if (!error) {
+            console.log(`[PROMO] Created promo code ${code} for user ${chatId}`);
+            return code;
+        }
+        if (error.code === '23505') { // Unique constraint violation
+            console.log(`[PROMO] Code ${code} collision, retrying...`);
+            continue;
+        }
+        console.error(`[PROMO] Error creating promo code for ${chatId}:`, error.message);
+        break;
+    }
+    throw new Error('Failed to generate promo code');
+}
+
+async function handlePromoCodeButton(chatId: number) {
+    const session = await sessionService.getSession(chatId);
+    if (!session || !session.language) return;
+
+    const t = TRANSLATIONS[session.language] as any;
+    try {
+        const code = await ensurePromoCode(chatId);
+        const msg = t.promo_msg
+            .replace('{code}', code)
+            .replace(/{bot}/g, botUsername)
+            .replace('{code}', code); // Second occurrence in the URL
+        await api.sendMessage(chatId, msg, { parseMode: 'HTML' });
+    } catch (err) {
+        console.error(`[PROMO] Error fetching promo code for ${chatId}:`, err);
+        await api.sendMessage(chatId, '⚠️ Error generating promo code.');
+    }
+}
+
+async function handlePromoRedemption(chatId: number, promoCode: string) {
+    const session = await sessionService.getOrCreateSession(chatId);
+    const lang = session.language || 'uz';
+    const t = TRANSLATIONS[lang] as any;
+
+    try {
+        // 1. Check if code exists
+        const { data: codeData } = await supabase
+            .from('promo_codes')
+            .select('user_id, code')
+            .eq('code', promoCode.toUpperCase())
+            .single();
+
+        if (!codeData) {
+            await api.sendMessage(chatId, t.promo_invalid);
+            return;
+        }
+
+        // 2. Can't use own code
+        if (codeData.user_id === chatId) {
+            await api.sendMessage(chatId, t.promo_own_code);
+            return;
+        }
+
+        // 3. Check if user already redeemed ANY promo code
+        const { data: existingRedemption } = await supabase
+            .from('promo_redemptions')
+            .select('id')
+            .eq('redeemed_by', chatId)
+            .single();
+
+        if (existingRedemption) {
+            await api.sendMessage(chatId, t.promo_already_used);
+            return;
+        }
+
+        // 4. Redeem: insert redemption record
+        const { error: redeemError } = await supabase
+            .from('promo_redemptions')
+            .insert([{
+                code: codeData.code,
+                redeemed_by: chatId,
+                owner_id: codeData.user_id
+            }]);
+
+        if (redeemError) {
+            if (redeemError.code === '23505') { // UNIQUE constraint on redeemed_by
+                await api.sendMessage(chatId, t.promo_already_used);
+            } else {
+                console.error(`[PROMO] Redemption insert error:`, redeemError.message);
+                await api.sendMessage(chatId, '⚠️ Error redeeming promo code.');
+            }
+            return;
+        }
+
+        // 5. Award credits to BOTH users
+        // Award to redeemer
+        const newRedeemerCredits = session.credits + PROMO_CREDIT;
+        await sessionService.updateSession(chatId, { credits: newRedeemerCredits });
+        await api.sendMessage(chatId, t.promo_redeemed, {
+            keyboard: getMenuKeyboard(lang, newRedeemerCredits)
+        });
+
+        // Award to code owner
+        const ownerSession = await sessionService.getSession(codeData.user_id);
+        if (ownerSession) {
+            const newOwnerCredits = ownerSession.credits + PROMO_CREDIT;
+            await sessionService.updateSession(codeData.user_id, { credits: newOwnerCredits });
+            const ownerLang = ownerSession.language || 'uz';
+            const ownerT = TRANSLATIONS[ownerLang] as any;
+            await api.sendMessage(codeData.user_id, ownerT.promo_owner_notify, {
+                keyboard: getMenuKeyboard(ownerLang, newOwnerCredits)
+            });
+        }
+
+        console.log(`[PROMO] Code ${promoCode} redeemed by ${chatId}. Owner: ${codeData.user_id}. Both got ${PROMO_CREDIT} credits.`);
+
+    } catch (err) {
+        console.error(`[PROMO] Error during redemption:`, err);
+        await api.sendMessage(chatId, '⚠️ Error processing promo code.');
+    }
+}
+
 async function handleShowBalanceOptions(chatId: number) {
     const session = await sessionService.getSession(chatId);
     if (!session || !session.language) return;
 
-    const t = TRANSLATIONS[session.language];
-    const buttons = [[{ text: t.btn_free_credits, callback_data: "start_survey" }]];
+    const t = TRANSLATIONS[session.language] as any;
 
-    // Send the merged low credits + survey prompt
-    const msg = t.low_credits.replace('{balance}', session.credits.toString());
-    await api.sendMessage(chatId, msg, { inlineKeyboard: buttons });
+    // Check if user has already completed the survey
+    const { data: surveyData } = await supabase
+        .from('survey_responses')
+        .select('id')
+        .eq('user_id', chatId)
+        .limit(1);
+
+    const hasTakenSurvey = surveyData && surveyData.length > 0;
+
+    if (!hasTakenSurvey) {
+        // Offer survey first (gives 30 credits)
+        const buttons = [[{ text: t.btn_free_credits, callback_data: "start_survey" }]];
+        const msg = t.low_credits.replace('{balance}', session.credits.toString());
+        await api.sendMessage(chatId, msg, { inlineKeyboard: buttons });
+    } else {
+        // Already took survey → suggest sharing promo code
+        const msg = t.low_credits.replace('{balance}', session.credits.toString());
+        await api.sendMessage(chatId, msg);
+        await api.sendMessage(chatId, t.promo_share_suggestion);
+    }
 }
 
 // Survey Question Senders
@@ -1035,7 +1212,22 @@ async function processUpdate(update: TelegramUpdate) {
         return;
     }
 
-    if (text === '/start' || text === '/reset') {
+    if (text === '/start' || text === '/reset' || text?.startsWith('/start ')) {
+        // Check for deep link promo code: /start PROMOCODE
+        const deepLinkParam = text?.startsWith('/start ') ? text.substring(7).trim() : null;
+
+        // Ensure promo code is generated for this user
+        try {
+            await ensurePromoCode(chatId);
+        } catch (e) {
+            console.error(`[PROMO] Failed to ensure promo code for ${chatId} during /start:`, e);
+        }
+
+        // If deep link contains a promo code, try to redeem it
+        if (deepLinkParam && deepLinkParam.length >= 4 && deepLinkParam !== 'credits_topup') {
+            await handlePromoRedemption(chatId, deepLinkParam);
+        }
+
         await sessionService.updateSession(chatId, {
             state: AppState.AWAITING_LANGUAGE,
             modelImage: null,
@@ -1109,6 +1301,10 @@ async function processUpdate(update: TelegramUpdate) {
             { text: "🇷🇺 Русский", callback_data: "lang_ru" }
         ]];
         await api.sendMessage(chatId, TRANSLATIONS['uz'].welcome_ask_lang, { inlineKeyboard: keyboard, removeKeyboard: true });
+        return;
+    }
+    if (text === t.menu_promo) {
+        await handlePromoCodeButton(chatId);
         return;
     }
 
@@ -1210,6 +1406,19 @@ app.get('/surveys', async (_req: express.Request, res: express.Response) => {
 
 app.listen(PORT, async () => {
     console.log(`Bot analytics server running on port ${PORT}`);
+
+    // Fetch bot username for promo code links
+    try {
+        const me: any = await api.getMe();
+        if (me?.result?.username) {
+            botUsername = me.result.username;
+            console.log(`✅ Bot username: @${botUsername}`);
+        } else {
+            console.error('❌ Could not fetch bot username from getMe()');
+        }
+    } catch (e) {
+        console.error('❌ Failed to call getMe():', e);
+    }
 
     // Check DB connection
     const { count, error } = await supabase.from('users').select('*', { count: 'exact', head: true });
