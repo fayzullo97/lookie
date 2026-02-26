@@ -531,21 +531,15 @@ async function continueGenerationAfterPreview(chatId: number, refinement?: strin
     const processingMsg = await api.sendMessage(chatId, t.generating);
 
     try {
-        let processedItems = [...session.bgPreviewItems];
+        const processedItems = [...session.bgPreviewItems];
 
-        // Step 2: Isolate clothing for items that contain a person (Gemini-based)
-        for (let i = 0; i < processedItems.length; i++) {
-            if (processedItems[i].containsPerson) {
-                try {
-                    console.log(`[GENERATE] Item ${i} contains a person. Isolating clothing...`);
-                    const isolatedBase64 = await isolateClothingItem(GEMINI_KEY, processedItems[i].base64, processedItems[i].description, USE_MOCK_AI);
-                    processedItems[i].base64 = isolatedBase64;
-                } catch (isoErr) {
-                    console.error(`[GENERATE] Failed to isolate clothing for item ${i}. Proceeding with original.`, isoErr);
-                }
-            }
-        }
+        // Step 1: Create the merged collage for generation
+        // These items were already pre-isolated and confirmed by the user
+        const isolatedBase64s = processedItems.map(i => i.base64);
+        console.log(`[GENERATE] Creating final merged collage for generation from ${isolatedBase64s.length} items...`);
+        const finalMergedOutfit = await mergeImages(isolatedBase64s);
 
+        // Step 2: Prepare prompt and descriptions
         let prompt = "";
         if (USE_MOCK_AI) {
             prompt = "Mock Prompt";
@@ -554,7 +548,17 @@ async function continueGenerationAfterPreview(chatId: number, refinement?: strin
             prompt = await generatePromptChatGPT(OPENAI_KEY, processedItems, refinement);
         }
 
-        const generatedBase64 = await generateTryOnImage(GEMINI_KEY, session.modelImage!, processedItems, prompt, USE_MOCK_AI);
+        const consolidatedDescriptions = processedItems.map(i => `[${i.category}]: ${i.description}`).join('\n');
+
+        // Step 3: Call generation with precisely two images (Model + Collage)
+        const generatedBase64 = await generateTryOnImage(
+            GEMINI_KEY,
+            session.modelImage!,
+            finalMergedOutfit,
+            consolidatedDescriptions,
+            prompt,
+            USE_MOCK_AI
+        );
 
         if (!generatedBase64) throw new Error("Generated image is empty");
         if (!USE_MOCK_AI && generatedBase64 === session.modelImage) {

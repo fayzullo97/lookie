@@ -318,7 +318,8 @@ export const isolateClothingItem = async (apiKey: string, base64Image: string, d
 export const generateTryOnImage = async (
   apiKey: string,
   modelImageBase64: string,
-  outfitItems: OutfitItem[],
+  outfitImageBase64: string,
+  outfitDescriptions: string,
   prompt: string,
   mockMode = false
 ): Promise<string> => {
@@ -337,24 +338,15 @@ export const generateTryOnImage = async (
       const cleanModel = await ensureBase64(modelImageBase64);
       if (!cleanModel) throw new Error("Invalid model image data");
 
+      const cleanOutfit = await ensureBase64(outfitImageBase64);
+      if (!cleanOutfit) throw new Error("Invalid outfit image data");
+
       // Image 1: The Model
       parts.push({ inlineData: { mimeType: "image/jpeg", data: cleanModel } });
 
-      // Image 2..N: The Items (Deduplicate so we don't send the same image 3 times for Top/Bottom/Shoes)
-      const uniqueItems = new Set<string>();
-      for (const item of outfitItems) {
-        const cleanItem = await ensureBase64(item.base64);
-        if (cleanItem && !uniqueItems.has(cleanItem)) {
-          uniqueItems.add(cleanItem);
-          parts.push({ inlineData: { mimeType: item.mimeType || "image/jpeg", data: cleanItem } });
-        }
-      }
+      // Image 2: The Merged Isolated Outfit Elements
+      parts.push({ inlineData: { mimeType: "image/png", data: cleanOutfit } });
 
-      // Prepare Consolidated Description
-      const allDescriptions = outfitItems.map(i => i.description).join("; ");
-      const hasBackgroundItem = outfitItems.some(i => i.category === ItemCategory.BACKGROUND);
-
-      // SYSTEM PROMPT (STRICT IDENTITY RULE + MULTI-ITEM LOGIC)
       const systemInstruction = `You are a professional virtual try-on image generation engine.
 
 CRITICAL IDENTITY RULE:
@@ -363,74 +355,38 @@ The ONLY human identity that must appear in the final generated image is the USE
 
 CRITICAL BACKGROUND RULE:
 ALWAYS preserve the original background of the USER MODEL IMAGE ([IMAGE 1]) EXACTLY AS IT IS.
-NEVER change, blur, or replace the background of [IMAGE 1] EVEN IF the outfit images ([IMAGE 2+]) have removed backgrounds or different backgrounds. The only exception is if the user provides an explicit 'background' category item, but otherwise, the background must remain identical to [IMAGE 1].
+NEVER change, blur, or replace the background of [IMAGE 1].
 
-HANDLING REFERENCE IMAGES ([IMAGE 2+]):
-- These images contain fashion items. A single image may contain a full outfit (top, bottom, shoes, accessories).
-- EXTRACT AND USE ALL VISIBLE ITEMS from [IMAGE 2+].
-- IGNORE any persons/models in [IMAGE 2+].
+HANDLING OUTFIT REFERENCE IMAGE ([IMAGE 2]):
+- [IMAGE 2] is a collage of ISOLATED fashion items on a white background.
+- EXTRACT AND APPLY ALL CLOTHING ITEMS shown in [IMAGE 2] onto the person in [IMAGE 1].
+- These items are pre-isolated. Use their exact visual style, textures, and details.
 
-CONFLICT RESOLUTION:
-- If [IMAGE 2+] contains multiple items of the SAME TYPE (e.g., two different skirts, two different coats):
-  -> INTELLIGENTLY CHOOSE ONE that best matches the overall style. Do not apply both.
-- If items overlap (e.g. a dress and a separate top):
-  -> Layer them logically or choose the most complete look.
+IDENTITY PRESERVATION:
+- Maintain the exact hairstyle, skin tone, and body features of the person in [IMAGE 1].
+- Only change the clothing and accessories by applying items from [IMAGE 2].`;
 
-STRICT EXECUTION:
-1. Identify ALL clothing/accessories in [IMAGE 2+].
-2. "Cut out" these items mentally.
-3. Apply them onto the USER MODEL ([IMAGE 1]), replacing the original clothes.
-4. Preserve [IMAGE 1]'s face, head, hair, body, AND BACKGROUND exactly as they are.
-5. If [IMAGE 2+] includes shoes, replace [IMAGE 1]'s shoes.
-
-If a conflict exists between model image and outfit image:
-→ ALWAYS prioritize the USER MODEL IMAGE ([IMAGE 1]) for identity/body AND exact background environment.
-→ ALWAYS prioritize [IMAGE 2+] for clothing/style.`;
-
-      // USER PROMPT (GENERATION TASK)
-      const userInstruction = `Generate a professional full-body fashion photograph.
+      const userInstruction = `Generate a professional high-quality fashion photograph.
 
 INPUT MAPPING:
-- [IMAGE 1]: USER MODEL (Source Identity - MUST BE PRESERVED)
-- [IMAGE 2+]: OUTFIT REFERENCES (Source Clothing - Apply ALL items found here)
+- [IMAGE 1]: TARGET MODEL (Preserve identity and background)
+- [IMAGE 2]: ISOLATED OUTFIT ELEMENTS (Collage of items to apply)
 
 PRIMARY SUBJECT:
-The person in the final image MUST be the person from [IMAGE 1].
-Maintain [IMAGE 1]'s exact face, identity, and body structure.
+The subject in the final image must be the person from [IMAGE 1].
+Maintain [IMAGE 1]'s facial features, gender, and posture.
 
 OUTFIT APPLICATION:
-Apply the fashion items described below (found in [IMAGE 2+]):
-${allDescriptions}
+Dress the person in [IMAGE 1] using ALL items found in [IMAGE 2]:
+${outfitDescriptions}
 
-INSTRUCTIONS:
-1. Use ALL distinct items found in the reference images (Top, Bottom, Shoes, Hat, Bag, etc.).
-2. If multiple images provide items for the same body part (e.g. 2 shirts), Pick ONE best option.
-3. Dress the model naturally.
-
-WARNING:
-Do NOT produce an image that looks like the models in [IMAGE 2+].
-Do NOT change the user's face.
+REFINEMENT INSTRUCTIONS:
+${prompt || "Make it look natural and realistic."}
 
 CRITICAL BACKGROUND RULE:
-YOU MUST ENTIRELY PRESERVE THE INITIAL BACKGROUND OF [IMAGE 1]. DO NOT CREATE A NEW BACKGROUND. DO NOT BLUR THE EXISTING BACKGROUND. Any change to the background environment is a failure.
+YOU MUST ENTIRELY PRESERVE THE INITIAL BACKGROUND OF [IMAGE 1]. DO NOT CREATE A NEW BACKGROUND. ANY CHANGE TO THE BACKGROUND IS A FAILURE.`;
 
-CRITICAL OUTFIT IMAGE RULE:
-[IMAGE 2+] may contain residual artifacts from background removal. ONLY extract and use the CLOTHING ITEMS.
-DO NOT import ANY of the following from [IMAGE 2+] into the final image:
-- Backgrounds, walls, floors, furniture, or environmental elements
-- Body parts, skin, faces, or hair from other people
-- Unrelated objects (bags on the floor, accessories not described, decorative items)
-ONLY use the specific clothing items described in the text above.
-
-STYLE:
-Professional fashion editorial. Realistic fit. High detail.
-
-The final image must clearly be the USER MODEL ([IMAGE 1]) wearing the selected items.
-${hasBackgroundItem ? "REPLACE the background with the provided background image." : "Keep the original background."}
-`;
-
-      // Add text part with prompt
-      parts.push({ text: `${userInstruction}\n\nAdditional Details: ${prompt}` });
+      parts.push({ text: userInstruction });
 
       return await retryOperation(async () => {
         const response = await ai.models.generateContent({
@@ -450,12 +406,14 @@ ${hasBackgroundItem ? "REPLACE the background with the provided background image
             if (part.inlineData?.data) return part.inlineData.data;
           }
         }
-        throw new Error("No image generated");
+        throw new Error("No image generated by AI");
       });
 
     } catch (error) {
-      console.error("Generation error:", error);
+      console.error("Try-on generation error:", error);
       throw error;
     }
   });
 };
+
+
