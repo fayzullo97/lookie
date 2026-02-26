@@ -10,7 +10,8 @@ class SessionService {
         outfitItems: OutfitItem[],
         modelImage: string | null,
         originalModelImage: string | null,
-        surveyAnswers: Record<string, any>
+        surveyAnswers: Record<string, any>,
+        bgPreviewItems?: OutfitItem[]
     }> = {};
 
     private getEphemeral(chatId: number) {
@@ -21,7 +22,8 @@ class SessionService {
                 outfitItems: [],
                 modelImage: null,
                 originalModelImage: null,
-                surveyAnswers: {}
+                surveyAnswers: {},
+                bgPreviewItems: undefined
             };
         }
         return this.ephemeralSessions[chatId];
@@ -104,6 +106,9 @@ class SessionService {
         if (updates.surveyAnswers !== undefined) {
             ephemeral.surveyAnswers = updates.surveyAnswers;
         }
+        if (updates.bgPreviewItems !== undefined) {
+            ephemeral.bgPreviewItems = updates.bgPreviewItems;
+        }
 
         // Build DB updates
         const dbUpdates: any = {};
@@ -155,7 +160,8 @@ class SessionService {
                     credits: INITIAL_CREDITS_VAL,
                     photoBuffer: ephemeral.photoBuffer,
                     bufferTimeout: ephemeral.bufferTimeout,
-                    surveyAnswers: ephemeral.surveyAnswers
+                    surveyAnswers: ephemeral.surveyAnswers,
+                    bgPreviewItems: ephemeral.bgPreviewItems
                 };
             }
             return undefined;
@@ -224,7 +230,8 @@ class SessionService {
             lastMonthlyGrant: user.last_monthly_grant,
             photoBuffer: ephemeral.photoBuffer,
             bufferTimeout: ephemeral.bufferTimeout,
-            surveyAnswers: ephemeral.surveyAnswers
+            surveyAnswers: ephemeral.surveyAnswers,
+            bgPreviewItems: ephemeral.bgPreviewItems
         };
     }
 }

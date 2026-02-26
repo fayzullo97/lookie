@@ -641,25 +641,8 @@ async function processBufferedPhotos(chatId: number) {
                 let finalImageBase64 = originalImageBase64;
                 let containsPerson = res.containsPerson;
 
-                // Move isolation step here from generation to save time.
-                // If it contains a person, isolate it immediately before saving.
-                if (containsPerson) {
-                    try {
-                        console.log(`[PROCESS] Isolating item ${i} (${res.category})...`);
-                        finalImageBase64 = await isolateClothingItem(GEMINI_KEY, originalImageBase64, res.description, USE_MOCK_AI);
-                        containsPerson = false; // Isolated now
-                    } catch (isoErr) {
-                        console.error(`[PROCESS] Isolation failed for ${i}, using original.`, isoErr);
-                    }
-                } else if (PIXLAB_KEY && [ItemCategory.OUTFIT, ItemCategory.TOP, ItemCategory.BOTTOM, ItemCategory.SHOES, ItemCategory.HANDBAG, ItemCategory.HAT, ItemCategory.ACCESSORY].includes(res.category as ItemCategory)) {
-                    // Start of legacy PixLab support (Optional)
-                    try {
-                        console.log(`[PROCESS] Clearing background for item ${i} (${res.category})...`);
-                        finalImageBase64 = await removeBackgroundPixLab(PIXLAB_KEY, originalImageBase64, USE_MOCK_AI);
-                    } catch (pixError) {
-                        console.error(`[PROCESS] PixLab failed for item ${i}. Using original.`, pixError);
-                    }
-                }
+                // NOTE: Isolation and background removal are now handled in the generation step
+                // (runGeneration -> bg removal preview -> continueGenerationAfterPreview -> isolation)
 
                 const path = `items/${chatId}/${Date.now()}_${i}.jpg`;
                 const { url: publicUrl, error: uploadErr } = await SupabaseStorageService.uploadImage('user-uploads', path, finalImageBase64, containsPerson || !PIXLAB_KEY ? 'image/jpeg' : 'image/png');
