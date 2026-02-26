@@ -344,8 +344,8 @@ export const generateTryOnImage = async (
       // Image 1: The Model
       parts.push({ inlineData: { mimeType: "image/jpeg", data: cleanModel } });
 
-      // Image 2: The Merged Isolated Outfit Elements
-      parts.push({ inlineData: { mimeType: "image/png", data: cleanOutfit } });
+      // Image 2: The Merged Isolated Outfit Elements (1:1 Collage)
+      parts.push({ inlineData: { mimeType: "image/jpeg", data: cleanOutfit } });
 
       const systemInstruction = `You are a professional virtual try-on image generation engine.
 
@@ -358,33 +358,39 @@ ALWAYS preserve the original background of the USER MODEL IMAGE ([IMAGE 1]) EXAC
 NEVER change, blur, or replace the background of [IMAGE 1].
 
 HANDLING OUTFIT REFERENCE IMAGE ([IMAGE 2]):
-- [IMAGE 2] is a collage of ISOLATED fashion items on a white background.
+- [IMAGE 2] is a 1:1 SQUARE COLLAGE of ISOLATED fashion items on a white background.
+- COMPLETELY IGNORE any residue, outlines, or white space in [IMAGE 2].
 - EXTRACT AND APPLY ALL CLOTHING ITEMS shown in [IMAGE 2] onto the person in [IMAGE 1].
-- These items are pre-isolated. Use their exact visual style, textures, and details.
+- Do not swap faces or transfer hair/skin tone from any small parts in [IMAGE 2].
 
 IDENTITY PRESERVATION:
-- Maintain the exact hairstyle, skin tone, and body features of the person in [IMAGE 1].
-- Only change the clothing and accessories by applying items from [IMAGE 2].`;
+- Maintain the exact facial features, hairstyle, skin tone, and body structure of the person in [IMAGE 1].
+- Only change the clothing and accessories by applying items from [IMAGE 2].
+- Always prioritize the USER MODEL IMAGE ([IMAGE 1]) for identity preservation.`;
 
-      const userInstruction = `Generate a professional high-quality fashion photograph.
+      const userInstruction = `Generate a professional high-quality fashion editorial photograph.
 
 INPUT MAPPING:
-- [IMAGE 1]: TARGET MODEL (Preserve identity and background)
-- [IMAGE 2]: ISOLATED OUTFIT ELEMENTS (Collage of items to apply)
+- [IMAGE 1]: TARGET MODEL (Source Identity - MUST BE PRESERVED)
+- [IMAGE 2]: ISOLATED OUTFIT ELEMENTS (1:1 Collage - Apply ALL items found here)
 
 PRIMARY SUBJECT:
-The subject in the final image must be the person from [IMAGE 1].
-Maintain [IMAGE 1]'s facial features, gender, and posture.
+The person in the final image MUST be the person from [IMAGE 1].
+Maintain [IMAGE 1]'s exact face, identity, gender, and posture.
 
 OUTFIT APPLICATION:
-Dress the person in [IMAGE 1] using ALL items found in [IMAGE 2]:
+Dress the subject in [IMAGE 1] using ALL items extracted from [IMAGE 2]:
 ${outfitDescriptions}
 
 REFINEMENT INSTRUCTIONS:
-${prompt || "Make it look natural and realistic."}
+${prompt || "Ensure a natural fit and photorealistic textures."}
 
-CRITICAL BACKGROUND RULE:
-YOU MUST ENTIRELY PRESERVE THE INITIAL BACKGROUND OF [IMAGE 1]. DO NOT CREATE A NEW BACKGROUND. ANY CHANGE TO THE BACKGROUND IS A FAILURE.`;
+WARNING:
+Do NOT change the user's face. [IMAGE 1] is SACRED.
+Do NOT create a new background. The background of [IMAGE 1] must be RETAINED EXACTLY.
+
+FINAL OUTPUT:
+High-resolution, photorealistic fashion photography where [IMAGE 1] is wearing the outfit from [IMAGE 2].`;
 
       parts.push({ text: userInstruction });
 
@@ -399,7 +405,7 @@ YOU MUST ENTIRELY PRESERVE THE INITIAL BACKGROUND OF [IMAGE 1]. DO NOT CREATE A 
         });
 
         const candidate = response.candidates?.[0];
-        if (candidate?.finishReason === 'SAFETY') throw new Error("Safety Block");
+        if (candidate?.finishReason === 'SAFETY') throw new Error("Safety Blocked");
 
         if (candidate?.content?.parts) {
           for (const part of candidate.content.parts) {
