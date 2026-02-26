@@ -347,6 +347,13 @@ export const generateTryOnImage = async (
       // Image 2: The Merged Isolated Outfit Elements (1:1 Collage)
       parts.push({ inlineData: { mimeType: "image/jpeg", data: cleanOutfit } });
 
+      console.log(`[GEMINI] Prepared generation with ${parts.filter(p => p.inlineData).length} images.`);
+
+      // Safety check: ensure no other images leaked in
+      if (parts.length > 2) {
+        console.warn(`[GEMINI] ⚠️ WARNING: parts array has ${parts.length} items. Expected exactly 2 images before text.`);
+      }
+
       const systemInstruction = `You are a professional virtual try-on image generation engine.
 
 CRITICAL IDENTITY RULE:

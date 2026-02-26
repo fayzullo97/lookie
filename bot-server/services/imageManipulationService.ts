@@ -44,8 +44,10 @@ export const mergeImages = async (imagesBase64: string[]): Promise<string> => {
             const row = Math.floor(i / gridSize);
             const col = i % gridSize;
 
-            // Resize image to fit in cell while maintaining aspect ratio
+            // 1. Trim surrounding whitespace/transparency
+            // 2. Resize to fit cell
             const resized = await sharp(buf)
+                .trim() // This is critical for making items larger
                 .resize(cellSize, cellSize, { fit: 'inside' })
                 .toBuffer();
 
