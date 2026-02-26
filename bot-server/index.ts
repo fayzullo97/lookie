@@ -384,26 +384,32 @@ async function runGeneration(chatId: number, refinement?: string) {
     const processingMsg = await api.sendMessage(chatId, t.bg_preview_processing);
 
     try {
-        let processedItems = [...session.outfitItems];
+        // Step 1: Deduplicate by category — keep only the FIRST item per category
+        const seenCategories = new Set<string>();
+        const dedupedItems = session.outfitItems.filter(item => {
+            if (seenCategories.has(item.category)) return false;
+            seenCategories.add(item.category);
+            return true;
+        });
+        console.log(`[GENERATE] Deduped: ${session.outfitItems.length} items -> ${dedupedItems.length} unique categories`);
 
-        // Step 1: Deduplicate by source URL — multiple categorized items may share the same image
-        const uniqueSourceUrls = [...new Set(processedItems.map(item => item.base64))];
-        console.log(`[GENERATE] ${processedItems.length} outfit item(s) from ${uniqueSourceUrls.length} unique source image(s)`);
+        let processedItems = [...dedupedItems];
 
         // Step 2: Remove background from each unique source image ONCE
-        const bgRemovedMap = new Map<string, string>(); // originalUrl -> bgRemovedBase64
+        const uniqueSourceUrls = [...new Set(processedItems.map(item => item.base64))];
+        const bgRemovedMap = new Map<string, string>();
         for (let i = 0; i < uniqueSourceUrls.length; i++) {
             try {
-                console.log(`[GENERATE] Processing unique image ${i + 1}/${uniqueSourceUrls.length}...`);
+                console.log(`[GENERATE] BG removal for unique image ${i + 1}/${uniqueSourceUrls.length}...`);
                 const base64Data = await ensureBase64(uniqueSourceUrls[i]);
                 const bgRemoved = await removeImageBackground(base64Data);
                 bgRemovedMap.set(uniqueSourceUrls[i], bgRemoved);
             } catch (bgErr) {
-                console.error(`[GENERATE] BG removal failed for unique image ${i}.`, bgErr);
+                console.error(`[GENERATE] BG removal failed for image ${i}.`, bgErr);
             }
         }
 
-        // Step 3: Apply bg-removed images back to all items
+        // Step 3: Apply bg-removed images back to all deduped items
         for (let i = 0; i < processedItems.length; i++) {
             const bgRemoved = bgRemovedMap.get(processedItems[i].base64);
             if (bgRemoved) {
@@ -417,14 +423,14 @@ async function runGeneration(chatId: number, refinement?: string) {
             await api.deleteMessage(chatId, processingMsg.result.message_id);
         }
 
-        // TEMPORARY: Send ONE preview per unique source image (not per item)
-        const previewImages = [...bgRemovedMap.values()];
-        for (let i = 0; i < previewImages.length; i++) {
-            const caption = `${t.bg_preview_caption} (${i + 1}/${previewImages.length})`;
-            await api.sendPhoto(chatId, previewImages[i], caption);
+        // TEMPORARY: Send one preview per deduped item
+        for (let i = 0; i < processedItems.length; i++) {
+            const catName = getCategoryName(session.language!, processedItems[i].category);
+            const caption = `${t.bg_preview_caption}\n${catName} (${i + 1}/${processedItems.length})`;
+            await api.sendPhoto(chatId, processedItems[i].base64, caption);
         }
 
-        // Save bg-removed items and wait for user confirmation
+        // Save deduped bg-removed items and wait for user confirmation
         await sessionService.updateSession(chatId, {
             state: AppState.AWAITING_BG_PREVIEW_CONFIRM,
             bgPreviewItems: processedItems
