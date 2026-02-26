@@ -557,10 +557,11 @@ async function runGeneration(chatId: number, refinement?: string) {
         return;
     }
 
+    const newCredits = session.credits - GEN_COST;
     await sessionService.updateSession(chatId, { state: AppState.GENERATING });
     await analytics.trackFunnelStep('gen_req');
 
-    const processingMsg = await api.sendMessage(chatId, t.bg_preview_processing);
+    const processingMsg = await api.sendMessage(chatId, t.generating);
 
     try {
         // Step 1: Filter to keep only the FIRST item of each category (User request: 2 tshirt -> 1 tshirt)
@@ -629,107 +630,40 @@ async function runGeneration(chatId: number, refinement?: string) {
             }
         }));
 
-        // Delete the processing message
-        if (processingMsg?.result?.message_id) {
-            await api.deleteMessage(chatId, processingMsg.result.message_id);
-        }
-
-        // Step 5: Send Previews (ONLY successfully isolated items — never show original/bg-removed full photos)
-        // Step 5: Merge Isolated Elements into one Preview Image
-        const previewImages = processedItems
-            .filter(item => isolationSuccess.has(item.id))
-            .map(item => item.base64);
-
-        let previewImageToLink: string | undefined;
-        let sentCount = previewImages.length;
-
-        if (previewImages.length > 0) {
-            try {
-                console.log(`[GENERATE] Merging ${previewImages.length} isolated items into one preview...`);
-                previewImageToLink = await mergeImages(previewImages);
-            } catch (mergeErr) {
-                console.error("[GENERATE] Failed to merge images, falling back to sending first isolated item.", mergeErr);
-                previewImageToLink = previewImages[0];
-            }
-        }
-
-        if (previewImageToLink) {
-            const catSummary = dedupedByCat.map(i => `🔹 ${getCategoryName(session.language!, i.category)}`).join('\n');
-            const caption = `${t.bg_preview_caption}\n${catSummary}`;
-            await api.sendPhoto(chatId, previewImageToLink, caption);
-        }
-
-        // If NO items were successfully isolated, we have to show SOMETHING or it's dead-end
-        if (sentCount === 0) {
-            console.log("[GENERATE] No items isolated. Falling back to one informative message.");
-            await api.sendMessage(chatId, "⚠️ Hech qanday kiyim qirqib olinmadi. Shunday bo'lsa ham davom ettiraverasizmi?");
-        }
-
-        // Save ONLY successfully isolated items for generation (exclude failed isolations to prevent
-        // original full-scene images from leaking into the generation collage)
+        // Step 5: Filter to only successfully isolated items
         const isolatedItems = processedItems.filter(item => isolationSuccess.has(item.id));
-        await sessionService.updateSession(chatId, {
-            state: AppState.AWAITING_BG_PREVIEW_CONFIRM,
-            bgPreviewItems: isolatedItems
-        });
 
-        // Send confirm/cancel buttons
-        const buttons = [
-            [{ text: t.bg_preview_confirm_btn, callback_data: 'confirm_bg_preview' }],
-            [{ text: t.bg_preview_cancel_btn, callback_data: 'cancel_bg_preview' }]
-        ];
-        await api.sendMessage(chatId, t.bg_preview_caption, { inlineKeyboard: buttons });
+        if (isolatedItems.length === 0) {
+            console.error("[GENERATE] No items were successfully isolated. Cannot generate.");
+            if (processingMsg?.result?.message_id) await api.deleteMessage(chatId, processingMsg.result.message_id);
+            await api.sendMessage(chatId, t.gen_error || '⚠️ Could not isolate any outfit items. Please try again.');
+            await sessionService.updateSession(chatId, { state: AppState.AWAITING_OUTFITS });
+            return;
+        }
 
-    } catch (error) {
-        console.error("BG Preview error:", error);
-        await api.sendMessage(chatId, `⚠️ BG Preview Error (Debug): ${(error as any).message || JSON.stringify(error)}`);
-        // Restore state so user can try again
-        await sessionService.updateSession(chatId, { state: AppState.AWAITING_OUTFITS });
-    }
-}
-
-async function continueGenerationAfterPreview(chatId: number, refinement?: string) {
-    const session = await sessionService.getSession(chatId);
-    if (!session || !session.modelImage || !session.language || !session.bgPreviewItems) return;
-    const t = TRANSLATIONS[session.language];
-
-    if (session.credits < GEN_COST) {
-        await handleShowBalanceOptions(chatId);
-        return;
-    }
-
-    const newCredits = session.credits - GEN_COST;
-    await sessionService.updateSession(chatId, { state: AppState.GENERATING });
-
-    const processingMsg = await api.sendMessage(chatId, t.generating);
-
-    try {
-        const processedItems = [...session.bgPreviewItems];
-
-        // Step 1: Create the merged collage for generation
-        // These items were already pre-isolated and confirmed by the user
-        const isolatedBase64s = processedItems.map(i => i.base64);
-        console.log(`[GENERATE] Creating final merged collage for generation from ${isolatedBase64s.length} items...`);
+        // Step 6: Create the merged collage for generation
+        const isolatedBase64s = isolatedItems.map(i => i.base64);
+        console.log(`[GENERATE] Creating final merged collage from ${isolatedBase64s.length} items...`);
         const finalMergedOutfit = await mergeImages(isolatedBase64s);
 
-        // Step 2: Prepare prompt and descriptions
+        // Step 7: Prepare prompt and descriptions
         let prompt = "";
         if (USE_MOCK_AI) {
             prompt = "Mock Prompt";
         } else {
             if (!OPENAI_KEY) throw new Error("MISSING_OPENAI_KEY");
-            prompt = await generatePromptChatGPT(OPENAI_KEY, processedItems, refinement);
+            prompt = await generatePromptChatGPT(OPENAI_KEY, isolatedItems, refinement);
         }
 
-        const consolidatedDescriptions = processedItems.map(i => `[${i.category}]: ${i.description}`).join('\n');
+        const consolidatedDescriptions = isolatedItems.map(i => `[${i.category}]: ${i.description}`).join('\n');
 
-        // Step 3: Get model image dimensions for aspect ratio preservation
+        // Step 8: Get model image dimensions for aspect ratio preservation
         const modelBase64 = await ensureBase64(session.modelImage!);
         const modelMeta = await sharp(Buffer.from(modelBase64, 'base64')).metadata();
         const aspectRatio = { width: modelMeta.width || 1024, height: modelMeta.height || 1024 };
         console.log(`[GENERATE] Model image aspect ratio: ${aspectRatio.width}x${aspectRatio.height}`);
 
-        // Step 4: Call generation with precisely two images (Model + Collage)
+        // Step 9: Call generation with precisely two images (Model + Collage)
         const generatedBase64 = await generateTryOnImage(
             GEMINI_KEY,
             session.modelImage!,
@@ -752,6 +686,11 @@ async function continueGenerationAfterPreview(chatId: number, refinement?: strin
             throw new Error("Credit calculation error");
         }
 
+        // Delete the processing message
+        if (processingMsg?.result?.message_id) {
+            await api.deleteMessage(chatId, processingMsg.result.message_id);
+        }
+
         await sessionService.updateSession(chatId, {
             state: AppState.COMPLETED,
             modelImage: generatedBase64,
@@ -772,19 +711,22 @@ async function continueGenerationAfterPreview(chatId: number, refinement?: strin
         const buttons = [[{ text: t.reset_btn, callback_data: "reset_session" }]];
         await api.sendPhoto(chatId, generatedBase64, t.gen_caption, buttons);
 
-        // Send an invisible/menu-updating system message to refresh the custom keyboard Balance digits
+        // Refresh the custom keyboard Balance digits
         await api.sendMessage(chatId, t.restore_menu, { keyboard: getMenuKeyboard(session.language, newCredits) });
 
     } catch (error) {
         console.error("Generation error:", error);
+        if (processingMsg?.result?.message_id) {
+            try { await api.deleteMessage(chatId, processingMsg.result.message_id); } catch (e) { }
+        }
         await analytics.trackGeneration(chatId, false, {
             prompt: 'N/A',
             costUsd: 0,
             costCredits: 0,
             error: (error as any).message
         });
-        const errSettings = (error as any);
-        await api.sendMessage(chatId, `⚠️ Generation Error (Debug): ${errSettings.message || JSON.stringify(error)}`);
+        await api.sendMessage(chatId, `⚠️ Generation Error (Debug): ${(error as any).message || JSON.stringify(error)}`);
+        await sessionService.updateSession(chatId, { state: AppState.AWAITING_OUTFITS });
     }
 }
 
@@ -1061,10 +1003,10 @@ async function processUpdate(update: TelegramUpdate) {
                     await api.sendMessage(chatId, t.need_item_alert);
                 }
             } else if (cb.data === 'confirm_bg_preview') {
-                if (session.state === AppState.AWAITING_BG_PREVIEW_CONFIRM && session.bgPreviewItems) {
-                    await continueGenerationAfterPreview(chatId);
-                }
+                // Legacy: preview step removed, generation runs directly now
+                console.log('[FLOW] Received legacy confirm_bg_preview callback, ignoring.');
             } else if (cb.data === 'cancel_bg_preview') {
+                // Legacy: preview cancellation
                 await sessionService.updateSession(chatId, {
                     state: AppState.AWAITING_OUTFITS,
                     bgPreviewItems: undefined
