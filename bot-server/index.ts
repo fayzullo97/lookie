@@ -81,6 +81,10 @@ const TRANSLATIONS = {
         complex_processing: "⚠️ Kiyimlar fonini tozalash jarayoni ketmoqda...",
         gift_received: "🎁 Tabriklaymiz! Sizga admin tomonidan {amount} bonus credit berildi.",
         refund_msg: "⚠️ Kechirasiz, kiyimlarni tozalash (isolation) xizmati hozir ishlamayapti.\n↩️ 10 credit qaytarildi. Oddiy rejimda davom etamiz.",
+        bg_preview_caption: "🔍 Fon tozalangan natija. Davom etish uchun '✅ Tasdiqlash' tugmasini bosing.",
+        bg_preview_confirm_btn: "✅ Tasdiqlash",
+        bg_preview_cancel_btn: "❌ Bekor qilish",
+        bg_preview_processing: "⏳ Fon tozalanmoqda... Iltimos, biroz kuting.",
         cat_outfit: "Kiyim",
         cat_shoes: "Oyoq kiyim",
         cat_handbag: "Sumka",
@@ -151,6 +155,10 @@ const TRANSLATIONS = {
         complex_processing: "⚠️ Удаление фона с одежды...",
         gift_received: "🎁 Поздравляем! Администратор начислил вам {amount} бонусных кредитов.",
         refund_msg: "⚠️ Извините, сервис очистки одежды (isolation) временно недоступен.\n↩️ 10 кредитов возвращено. Продолжаем в обычном режиме.",
+        bg_preview_caption: "🔍 Результат удаления фона. Нажмите '✅ Подтвердить', чтобы продолжить генерацию.",
+        bg_preview_confirm_btn: "✅ Подтвердить",
+        bg_preview_cancel_btn: "❌ Отменить",
+        bg_preview_processing: "⏳ Удаление фона... Пожалуйста, подождите.",
         cat_outfit: "Одежда",
         cat_shoes: "Обувь",
         cat_handbag: "Сумка",
@@ -362,19 +370,17 @@ async function handleResetLook(chatId: number) {
 async function runGeneration(chatId: number, refinement?: string) {
     const session = await sessionService.getSession(chatId);
     if (!session || !session.modelImage || !session.language) return;
-    const t = TRANSLATIONS[session.language];
+    const t = TRANSLATIONS[session.language] as any;
 
     if (session.credits < GEN_COST) {
         await handleShowBalanceOptions(chatId);
         return;
     }
 
-    const newCredits = session.credits - GEN_COST;
     await sessionService.updateSession(chatId, { state: AppState.GENERATING });
-
     await analytics.trackFunnelStep('gen_req');
 
-    const processingMsg = await api.sendMessage(chatId, t.generating);
+    const processingMsg = await api.sendMessage(chatId, t.bg_preview_processing);
 
     try {
         let processedItems = [...session.outfitItems];
@@ -390,6 +396,56 @@ async function runGeneration(chatId: number, refinement?: string) {
                 console.error(`[GENERATE] BG removal failed for item ${i}. Using original.`, bgErr);
             }
         }
+
+        // Delete the processing message
+        if (processingMsg?.result?.message_id) {
+            await api.deleteMessage(chatId, processingMsg.result.message_id);
+        }
+
+        // TEMPORARY: Send bg-removed previews to user for confirmation
+        for (let i = 0; i < processedItems.length; i++) {
+            const caption = `${t.bg_preview_caption} (${i + 1}/${processedItems.length})`;
+            await api.sendPhoto(chatId, processedItems[i].base64, caption);
+        }
+
+        // Save bg-removed items and wait for user confirmation
+        await sessionService.updateSession(chatId, {
+            state: AppState.AWAITING_BG_PREVIEW_CONFIRM,
+            bgPreviewItems: processedItems
+        });
+
+        // Send confirm/cancel buttons
+        const buttons = [
+            [{ text: t.bg_preview_confirm_btn, callback_data: 'confirm_bg_preview' }],
+            [{ text: t.bg_preview_cancel_btn, callback_data: 'cancel_bg_preview' }]
+        ];
+        await api.sendMessage(chatId, t.bg_preview_caption, { inlineKeyboard: buttons });
+
+    } catch (error) {
+        console.error("BG Preview error:", error);
+        await api.sendMessage(chatId, `⚠️ BG Preview Error (Debug): ${(error as any).message || JSON.stringify(error)}`);
+        // Restore state so user can try again
+        await sessionService.updateSession(chatId, { state: AppState.AWAITING_OUTFITS });
+    }
+}
+
+async function continueGenerationAfterPreview(chatId: number, refinement?: string) {
+    const session = await sessionService.getSession(chatId);
+    if (!session || !session.modelImage || !session.language || !session.bgPreviewItems) return;
+    const t = TRANSLATIONS[session.language];
+
+    if (session.credits < GEN_COST) {
+        await handleShowBalanceOptions(chatId);
+        return;
+    }
+
+    const newCredits = session.credits - GEN_COST;
+    await sessionService.updateSession(chatId, { state: AppState.GENERATING });
+
+    const processingMsg = await api.sendMessage(chatId, t.generating);
+
+    try {
+        let processedItems = [...session.bgPreviewItems];
 
         // Step 2: Isolate clothing for items that contain a person (Gemini-based)
         for (let i = 0; i < processedItems.length; i++) {
@@ -430,7 +486,8 @@ async function runGeneration(chatId: number, refinement?: string) {
             state: AppState.COMPLETED,
             modelImage: generatedBase64,
             outfitItems: [],
-            credits: newCredits
+            credits: newCredits,
+            bgPreviewItems: undefined
         });
 
         // Verify update
@@ -750,6 +807,16 @@ async function processUpdate(update: TelegramUpdate) {
                 } else {
                     await api.sendMessage(chatId, t.need_item_alert);
                 }
+            } else if (cb.data === 'confirm_bg_preview') {
+                if (session.state === AppState.AWAITING_BG_PREVIEW_CONFIRM && session.bgPreviewItems) {
+                    await continueGenerationAfterPreview(chatId);
+                }
+            } else if (cb.data === 'cancel_bg_preview') {
+                await sessionService.updateSession(chatId, {
+                    state: AppState.AWAITING_OUTFITS,
+                    bgPreviewItems: undefined
+                });
+                await api.sendMessage(chatId, t.reset_keep_model);
             }
 
             // Survey Handlers

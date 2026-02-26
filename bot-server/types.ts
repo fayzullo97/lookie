@@ -7,6 +7,7 @@ export enum AppState {
     AWAITING_MODEL_IMAGE = 'AWAITING_MODEL_IMAGE',
     AWAITING_OUTFITS = 'AWAITING_OUTFITS',
     GENERATING = 'GENERATING',
+    AWAITING_BG_PREVIEW_CONFIRM = 'AWAITING_BG_PREVIEW_CONFIRM',
     COMPLETED = 'COMPLETED',
     SURVEY_Q1 = 'SURVEY_Q1',
     SURVEY_Q2 = 'SURVEY_Q2',
@@ -68,6 +69,7 @@ export interface UserSession {
     surveyAnswers?: Record<string, any>;
     photoBuffer: string[];
     bufferTimeout: any;
+    bgPreviewItems?: OutfitItem[];
 }
 
 export interface TelegramUpdate {
