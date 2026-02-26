@@ -399,16 +399,20 @@ async function runGeneration(chatId: number, refinement?: string) {
         // Step 3: Background removal for unique source images
         const uniqueUrls = [...new Set(processedItems.map(i => i.base64))];
         const bgRemovedCache = new Map<string, string>(); // sourceUrl -> bgRemovedBase64
+        const originalBase64Map = new Map<string, string>(); // sourceUrl -> originalBase64
 
         for (const url of uniqueUrls) {
             try {
                 const base64Data = await ensureBase64(url);
                 if (!base64Data) continue;
+                originalBase64Map.set(url, base64Data); // Store original for comparison
+
                 const bgRemoved = await removeImageBackground(base64Data);
                 bgRemovedCache.set(url, bgRemoved || base64Data);
             } catch (e) {
                 console.error(`[GENERATE] BG removal failed for ${url}. Using original.`, e);
-                const originalBase64 = await ensureBase64(url);
+                const originalBase64 = originalBase64Map.get(url) || await ensureBase64(url);
+                originalBase64Map.set(url, originalBase64); // Store original for comparison
                 bgRemovedCache.set(url, originalBase64);
             }
         }
@@ -421,6 +425,7 @@ async function runGeneration(chatId: number, refinement?: string) {
             ItemCategory.OUTFIT
         ];
 
+        const isolationSuccess = new Set<string>(); // item ID -> boolean
         for (let i = 0; i < processedItems.length; i++) {
             const item = processedItems[i];
             const sourceBase64 = bgRemovedCache.get(item.base64);
@@ -433,6 +438,7 @@ async function runGeneration(chatId: number, refinement?: string) {
                     const isolated = await isolateClothingItem(GEMINI_KEY, sourceBase64, item.description, USE_MOCK_AI);
                     item.base64 = isolated;
                     item.mimeType = 'image/png';
+                    isolationSuccess.add(item.id);
                 } catch (isoErr) {
                     console.error(`[GENERATE] Isolation failed for ${item.category}, using bg-removed full photo.`, isoErr);
                     item.base64 = sourceBase64;
@@ -449,12 +455,29 @@ async function runGeneration(chatId: number, refinement?: string) {
             await api.deleteMessage(chatId, processingMsg.result.message_id);
         }
 
-        // Step 5: Send Previews (Only UNIQUE base64 results to avoid duplicate images)
+        // Step 5: Send Previews (Only effectively isolated/bg-removed snippets)
         const sentBase64s = new Set<string>();
         let sentCount = 0;
         for (let i = 0; i < processedItems.length; i++) {
             const item = processedItems[i];
-            if (!item.base64 || sentBase64s.has(item.base64)) continue;
+
+            // Logic to determine if this is "clean" enough to show:
+            // 1. It was successfuly isolated by Gemini (White background, no person)
+            // 2. OR it was successfully background-removed by imgly (White background, person might remain)
+            const wasIsolated = isolationSuccess.has(item.id);
+
+            // Check if THIS specific item index shared a source that was successfully BG removed
+            // Note: dedupedByCat[i].base64 is the original URL
+            const originalUrl = dedupedByCat[i].base64;
+            const originalData = originalBase64Map.get(originalUrl);
+            const bgRemovedData = bgRemovedCache.get(originalUrl);
+            const wasBgRemoved = originalData && bgRemovedData && (originalData !== bgRemovedData);
+
+            if (!item.base64 || sentBase64s.has(item.base64) || (!wasIsolated && !wasBgRemoved)) {
+                console.log(`[GENERATE] Skipping preview for ${item.category} (not isolated/clean enough)`);
+                continue;
+            }
+
             sentBase64s.add(item.base64);
             sentCount++;
 
@@ -463,7 +486,11 @@ async function runGeneration(chatId: number, refinement?: string) {
             await api.sendPhoto(chatId, item.base64, caption);
         }
 
-        if (sentCount === 0) throw new Error("No items could be processed for preview.");
+        // If NO items were successfully isolated, we have to show SOMETHING or it's dead-end
+        if (sentCount === 0) {
+            console.log("[GENERATE] No items isolated. Falling back to one informative message.");
+            await api.sendMessage(chatId, "⚠️ Hech qanday kiyim qirqib olinmadi. Shunday bo'lsa ham davom ettiraverasizmi?");
+        }
 
         // Save processed isolated items and wait for user confirmation
         await sessionService.updateSession(chatId, {
