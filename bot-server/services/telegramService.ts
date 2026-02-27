@@ -1,6 +1,7 @@
 
 import fetch from 'node-fetch';
 import FormData from 'form-data';
+import * as fs from 'fs';
 
 const API_BASE = 'https://api.telegram.org/bot';
 const FILE_BASE = 'https://api.telegram.org/file/bot';
@@ -178,6 +179,33 @@ export class TelegramService {
             return await res.json();
         } catch (e) {
             console.error("SendPhoto error", e);
+            return null;
+        }
+    }
+
+    async sendPhotoFromFile(chatId: number, filePath: string, caption?: string, keyboard?: any[][]) {
+        try {
+            const fileStream = fs.createReadStream(filePath);
+            const formData = new FormData();
+            formData.append('chat_id', chatId.toString());
+            formData.append('photo', fileStream, { filename: 'sample.jpg', contentType: 'image/jpeg' });
+            if (caption) formData.append('caption', caption);
+
+            if (keyboard) {
+                formData.append('reply_markup', JSON.stringify({
+                    keyboard: keyboard,
+                    resize_keyboard: true,
+                    is_persistent: true
+                }));
+            }
+
+            const res = await fetch(`${API_BASE}${this.token}/sendPhoto`, {
+                method: 'POST',
+                body: formData
+            });
+            return await res.json();
+        } catch (e) {
+            console.error("SendPhotoFromFile error", e);
             return null;
         }
     }

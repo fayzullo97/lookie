@@ -2,6 +2,8 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import path from 'path';
+
 import express from 'express';
 import cors from 'cors';
 import { TelegramService } from './services/telegramService';
@@ -46,7 +48,9 @@ let botUsername = ''; // Fetched at startup via getMe()
 const TRANSLATIONS = {
     uz: {
         welcome_ask_lang: "Assalomu alaykum! Botga xush kelibsiz. 🤖\nIltimos, muloqot tilini tanlang:",
-        welcome_start: "Salom! Men sizning AI stilistingizman. ✨\n\nSizga boshlash uchun 30 ta credit sovg'a qilindi! 🎁\nBoshlash uchun o'z rasmingizni yuboring (to'liq bo'y-bast bilan).",
+        welcome_emoji: "🎉",
+        welcome_credits: "Sizga boshlash uchun 30 ta credit sovg'a qilindi! 🎁",
+        welcome_send_photo: "Boshlash uchun o'z rasmingizni yuboring (to'liq bo'y-bast bilan).",
         monthly_grant_msg: "Yangi oy muborak! 🌙 Sizga 30 ta bepul credit qo'shildi. 🎁",
         low_credits: "⚠️ Hisobingizda creditlar yetarli emas. Image yaratish uchun kamida 10 ta credit kerak.\n\nHozirgi balans: {balance} (Need 10)\n\n🎁 Quyidagi 5 ta qisqa savolga javob bering va 30 ta bepul credit oling!",
         buy_credits_btn: "💎 Credit sotib olish",
@@ -128,7 +132,9 @@ const TRANSLATIONS = {
     },
     ru: {
         welcome_ask_lang: "Здравствуйте! Добро пожаловать. 🤖\nПожалуйста, выберите язык общения:",
-        welcome_start: "Привет! Я ваш ИИ-стилист. ✨\n\nВам начислено 30 приветственных кредитов! 🎁\nЧтобы начать, пожалуйста, отправьте мне ваше фото в полный рост.",
+        welcome_emoji: "🎉",
+        welcome_credits: "Вам начислено 30 приветственных кредитов! 🎁",
+        welcome_send_photo: "Чтобы начать, пожалуйста, отправьте мне ваше фото в полный рост.",
         monthly_grant_msg: "С новым месяцем! 🌙 Вам начислено 30 бесплатных кредитов. 🎁",
         low_credits: "⚠️ Недостаточно кредитов. Для генерации нужно минимум 10 кредитов.\n\nТекущий баланс: {balance} (Need 10)\n\n🎁 Ответьте на 5 коротких вопросов и получите 30 бесплатных кредитов!",
         buy_credits_btn: "💎 Купить кредиты",
@@ -962,7 +968,11 @@ async function processUpdate(update: TelegramUpdate) {
                 if (!sentModel) {
                     // Merge language + state update into one atomic call
                     await sessionService.updateSession(chatId, { language: selectedLang, state: AppState.AWAITING_MODEL_IMAGE });
-                    await api.sendMessage(chatId, t.welcome_start, { keyboard: getMenuKeyboard(selectedLang, credits) });
+                    // Send 3 separate welcome messages
+                    await api.sendMessage(chatId, t.welcome_emoji);
+                    await api.sendMessage(chatId, t.welcome_credits);
+                    const sampleImagePath = path.join(process.cwd(), 'assets', 'sample_model.jpg');
+                    await api.sendPhotoFromFile(chatId, sampleImagePath, t.welcome_send_photo, getMenuKeyboard(selectedLang, credits));
                 }
                 return;
             }
