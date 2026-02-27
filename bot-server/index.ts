@@ -709,6 +709,14 @@ async function runGeneration(chatId: number, refinement?: string) {
         const { error: clearErr } = await supabase.from('outfit_queue').delete().eq('user_id', chatId);
         if (clearErr) console.error(`[DB] Error clearing outfit queue after generation for ${chatId}:`, clearErr.message);
 
+        // Track successful generation in analytics
+        await analytics.trackGeneration(chatId, true, {
+            prompt: prompt || 'N/A',
+            costUsd: 0.04,
+            costCredits: GEN_COST,
+            path: 'generated'
+        });
+
         // Send photo with inline buttons
         const buttons = [[{ text: t.reset_btn, callback_data: "reset_session" }]];
         await api.sendPhoto(chatId, generatedBase64, t.gen_caption, buttons);
