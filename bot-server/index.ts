@@ -128,7 +128,11 @@ const TRANSLATIONS = {
         promo_already_used: "⚠️ Siz allaqachon promo koddan foydalangansiz. Har bir foydalanuvchi faqat bitta promo kodni ishlatishi mumkin.",
         promo_own_code: "⚠️ O'z promo kodingizni ishlata olmaysiz.",
         promo_invalid: "⚠️ Noto'g'ri promo kod.",
-        promo_share_suggestion: "💡 Do'stlaringizga promo kodingizni ulashing va har biri uchun 20 ta bepul credit oling!\n\n'🎟 Promo kod' tugmasini bosing."
+        promo_share_suggestion: "💡 Do'stlaringizga promo kodingizni ulashing va har biri uchun 20 ta bepul credit oling!\n\n'🎟 Promo kod' tugmasini bosing.",
+        btn_use_promo: "🎟 Promo kod kiritish",
+        btn_back: "⬅️ Ortga",
+        promo_enter_prompt: "Iltimos promo kodni kiriting:",
+        balance_menu_msg: "💰 Sizning balansingiz: {balance} credit"
     },
     ru: {
         welcome_ask_lang: "Здравствуйте! Добро пожаловать. 🤖\nПожалуйста, выберите язык общения:",
@@ -212,7 +216,11 @@ const TRANSLATIONS = {
         promo_already_used: "⚠️ Вы уже использовали промо-код. Каждый пользователь может использовать только один промо-код.",
         promo_own_code: "⚠️ Вы не можете использовать свой собственный промо-код.",
         promo_invalid: "⚠️ Неверный промо-код.",
-        promo_share_suggestion: "💡 Поделитесь промо-кодом с друзьями и получите 20 бесплатных кредитов за каждого!\n\nНажмите кнопку '🎟 Промо код'."
+        promo_share_suggestion: "💡 Поделитесь промо-кодом с друзьями и получите 20 бесплатных кредитов за каждого!\n\nНажмите кнопку '🎟 Промо код'.",
+        btn_use_promo: "🎟 Ввести промо-код",
+        btn_back: "⬅️ Назад",
+        promo_enter_prompt: "Пожалуйста, введите промо-код:",
+        balance_menu_msg: "💰 Ваш баланс: {balance} кредитов"
     }
 };
 
@@ -415,26 +423,14 @@ async function handleShowBalanceOptions(chatId: number) {
 
     const t = TRANSLATIONS[session.language] as any;
 
-    // Check if user has already completed the survey
-    const { data: surveyData } = await supabase
-        .from('survey_responses')
-        .select('id')
-        .eq('user_id', chatId)
-        .limit(1);
+    const balanceKeyboard = [
+        [{ text: t.btn_free_credits }],
+        [{ text: t.btn_use_promo }],
+        [{ text: t.btn_back }]
+    ];
 
-    const hasTakenSurvey = surveyData && surveyData.length > 0;
-
-    if (!hasTakenSurvey) {
-        // Offer survey first (gives 30 credits)
-        const buttons = [[{ text: t.btn_free_credits, callback_data: "start_survey" }]];
-        const msg = t.low_credits.replace('{balance}', session.credits.toString());
-        await api.sendMessage(chatId, msg, { inlineKeyboard: buttons });
-    } else {
-        // Already took survey → suggest sharing promo code
-        const msg = t.low_credits.replace('{balance}', session.credits.toString());
-        await api.sendMessage(chatId, msg);
-        await api.sendMessage(chatId, t.promo_share_suggestion);
-    }
+    const msg = t.balance_menu_msg.replace('{balance}', session.credits.toString());
+    await api.sendMessage(chatId, msg, { keyboard: balanceKeyboard });
 }
 
 // Survey Question Senders
@@ -1259,6 +1255,49 @@ async function processUpdate(update: TelegramUpdate) {
         return;
     }
 
+    // Balance sub-menu buttons
+    if (text === t.btn_free_credits) {
+        // Check if user already completed survey
+        const { data: surveyData } = await supabase
+            .from('survey_responses')
+            .select('id')
+            .eq('user_id', chatId)
+            .limit(1);
+        const hasTakenSurvey = surveyData && surveyData.length > 0;
+
+        if (hasTakenSurvey) {
+            await api.sendMessage(chatId, t.sq_thanks, { keyboard: getMenuKeyboard(session.language, session.credits) });
+        } else {
+            const buttons = [[{ text: t.btn_free_credits, callback_data: "start_survey" }]];
+            await api.sendMessage(chatId, t.low_credits.replace('{balance}', session.credits.toString()), { inlineKeyboard: buttons });
+        }
+        return;
+    }
+
+    if (text === t.btn_use_promo) {
+        await sessionService.updateSession(chatId, { state: AppState.AWAITING_PROMO_CODE });
+        await api.sendMessage(chatId, t.promo_enter_prompt, { keyboard: [[{ text: t.btn_back }]] });
+        return;
+    }
+
+    if (text === t.btn_back) {
+        await api.sendMessage(chatId, t.restore_menu, { keyboard: getMenuKeyboard(session.language, session.credits) });
+        return;
+    }
+
+    // Handle promo code text entry
+    if (session.state === AppState.AWAITING_PROMO_CODE && text) {
+        const promoCode = text.trim().toUpperCase();
+        await handlePromoRedemption(chatId, promoCode);
+        // Restore previous state
+        const updatedSession = await sessionService.getSession(chatId);
+        const restoreState = updatedSession?.modelImage ? AppState.AWAITING_OUTFITS : AppState.AWAITING_MODEL_IMAGE;
+        await sessionService.updateSession(chatId, { state: restoreState });
+        const refreshedSession = await sessionService.getSession(chatId);
+        await api.sendMessage(chatId, t.restore_menu, { keyboard: getMenuKeyboard(session.language, refreshedSession?.credits || session.credits) });
+        return;
+    }
+
     if (photos && photos.length > 0) {
         const largestPhoto = photos[photos.length - 1];
         const base64Image = await api.getFile(largestPhoto.file_id);
@@ -1350,6 +1389,15 @@ app.get('/surveys', async (_req: express.Request, res: express.Response) => {
     try {
         const surveys = await analytics.getSurveyResponses();
         res.json(surveys);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/promos', async (_req: express.Request, res: express.Response) => {
+    try {
+        const data = await analytics.getPromoData();
+        res.json(data);
     } catch (e: any) {
         res.status(500).json({ error: e.message });
     }

@@ -14,6 +14,7 @@ export enum AppState {
     SURVEY_Q3 = 'SURVEY_Q3',
     SURVEY_Q4 = 'SURVEY_Q4',
     SURVEY_Q5 = 'SURVEY_Q5',
+    AWAITING_PROMO_CODE = 'AWAITING_PROMO_CODE',
 }
 
 export enum ItemCategory {

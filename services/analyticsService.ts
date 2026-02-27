@@ -48,6 +48,16 @@ class AnalyticsService {
     }
   }
 
+  public async getPromoData(): Promise<any> {
+    try {
+      const res = await fetch(`${API_BASE}/promos`);
+      return await res.json();
+    } catch (e) {
+      console.error("Failed to fetch promo data", e);
+      throw e;
+    }
+  }
+
   // --- No-op methods for compatibility with existing tracking calls in UI (if any) ---
   public trackUserActivity() { }
   public trackFunnelStep() { }
