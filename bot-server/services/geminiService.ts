@@ -2,6 +2,42 @@ import { GoogleGenAI, Type } from "@google/genai";
 import fetch from "node-fetch";
 import { ValidationResult, CategorizationResult, ItemCategory, OutfitItem } from "../types";
 
+// --- PRICING PER MILLION TOKENS (USD) ---
+// gemini-3-flash-preview (text-only)
+const FLASH_TEXT_INPUT_PRICE = 0.10;   // $0.10 per 1M input tokens
+const FLASH_TEXT_OUTPUT_PRICE = 0.40;  // $0.40 per 1M output tokens
+// gemini-2.5-flash-image (image gen)
+const FLASH_IMAGE_INPUT_PRICE = 0.10;  // $0.10 per 1M input tokens
+const FLASH_IMAGE_OUTPUT_PRICE = 60.0; // $60 per 1M output tokens (image output)
+// OpenAI gpt-4o-mini
+const OPENAI_MINI_INPUT_PRICE = 0.15;  // $0.15 per 1M input tokens
+const OPENAI_MINI_OUTPUT_PRICE = 0.60; // $0.60 per 1M output tokens
+
+// --- COST TRACKER ---
+let _accumulatedCost = 0;
+
+export function resetCostTracker() { _accumulatedCost = 0; }
+export function getTotalCost(): number { return _accumulatedCost; }
+export function addExternalCost(cost: number) { _accumulatedCost += cost; }
+
+function extractCostFromResponse(response: any, isImageModel: boolean) {
+  try {
+    const usage = response?.usageMetadata;
+    if (!usage) return;
+    const inputTokens = usage.promptTokenCount || 0;
+    const outputTokens = usage.candidatesTokenCount || usage.totalTokenCount - inputTokens || 0;
+
+    const inputPrice = isImageModel ? FLASH_IMAGE_INPUT_PRICE : FLASH_TEXT_INPUT_PRICE;
+    const outputPrice = isImageModel ? FLASH_IMAGE_OUTPUT_PRICE : FLASH_TEXT_OUTPUT_PRICE;
+
+    const cost = (inputTokens / 1_000_000) * inputPrice + (outputTokens / 1_000_000) * outputPrice;
+    _accumulatedCost += cost;
+    console.log(`[COST] +$${cost.toFixed(4)} (in:${inputTokens} out:${outputTokens} img:${isImageModel}) total:$${_accumulatedCost.toFixed(4)}`);
+  } catch (e) {
+    // Silently skip if usage metadata is not available
+  }
+}
+
 // --- GLOBAL RATE LIMITER / QUEUE ---
 const MIN_REQUEST_INTERVAL_MS = 2000;
 let lastRequestTimestamp = 0;
@@ -149,6 +185,7 @@ export const validateModelImage = async (apiKey: string, base64Image: string, mo
             responseSchema: schema,
           }
         });
+        extractCostFromResponse(response, false);
 
         const text = response.text;
         if (!text) throw new Error("No response");
@@ -234,6 +271,7 @@ export const categorizeOutfitItemsBatch = async (apiKey: string, base64Images: s
             responseSchema: schema,
           }
         });
+        extractCostFromResponse(response, false);
 
         const text = response.text;
         if (!text) throw new Error("No response");
@@ -308,6 +346,7 @@ OUTPUT: A single product image on pure white (#FFFFFF) background with NOTHING e
           temperature: 0.1
         }
       });
+      extractCostFromResponse(response, true);
 
       const candidate = response.candidates?.[0];
       if (candidate?.content?.parts) {
@@ -440,6 +479,7 @@ Do NOT create a new background. The background of [IMAGE 1] must be RETAINED EXA
             systemInstruction: systemInstruction
           }
         });
+        extractCostFromResponse(response, true);
 
         const candidate = response.candidates?.[0];
         if (candidate?.finishReason === 'SAFETY') throw new Error("Safety Blocked");

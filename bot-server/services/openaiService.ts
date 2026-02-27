@@ -1,5 +1,6 @@
 
 import { OutfitItem, ItemCategory } from "../types";
+import { addExternalCost } from "./geminiService";
 
 export const generatePromptChatGPT = async (
   apiKey: string,
@@ -59,6 +60,14 @@ Write the prompt.`;
 
     if (!response.ok) {
       throw new Error(data.error?.message || "OpenAI API Error");
+    }
+
+    // Track OpenAI cost
+    if (data.usage) {
+      const inputCost = (data.usage.prompt_tokens / 1_000_000) * 0.15;
+      const outputCost = (data.usage.completion_tokens / 1_000_000) * 0.60;
+      addExternalCost(inputCost + outputCost);
+      console.log(`[COST] OpenAI +$${(inputCost + outputCost).toFixed(4)} (in:${data.usage.prompt_tokens} out:${data.usage.completion_tokens})`);
     }
 
     return data.choices[0]?.message?.content?.trim() || "A model wearing fashion items.";

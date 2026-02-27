@@ -21,7 +21,9 @@ import {
     categorizeOutfitItemsBatch,
     generateTryOnImage,
     isolateClothingItem,
-    ensureBase64
+    ensureBase64,
+    resetCostTracker,
+    getTotalCost
 } from './services/geminiService';
 import { removeBackgroundPixLab } from './services/pixlabService';
 import { removeImageBackground } from './services/backgroundRemovalService';
@@ -562,6 +564,7 @@ async function runGeneration(chatId: number, refinement?: string) {
     const newCredits = session.credits - GEN_COST;
     await sessionService.updateSession(chatId, { state: AppState.GENERATING });
     await analytics.trackFunnelStep('gen_req');
+    resetCostTracker();
 
     const processingMsg = await api.sendMessage(chatId, t.generating);
 
@@ -710,9 +713,11 @@ async function runGeneration(chatId: number, refinement?: string) {
         if (clearErr) console.error(`[DB] Error clearing outfit queue after generation for ${chatId}:`, clearErr.message);
 
         // Track successful generation in analytics
+        const realCost = getTotalCost();
+        console.log(`[COST] Total generation cost: $${realCost.toFixed(4)}`);
         await analytics.trackGeneration(chatId, true, {
             prompt: prompt || 'N/A',
-            costUsd: 0.04,
+            costUsd: realCost,
             costCredits: GEN_COST,
             path: 'generated'
         });
